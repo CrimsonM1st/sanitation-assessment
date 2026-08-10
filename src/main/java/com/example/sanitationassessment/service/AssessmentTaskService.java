@@ -1,19 +1,20 @@
 package com.example.sanitationassessment.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.mapper.Mapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.sanitationassessment.domain.AssessmentTask;
 import com.example.sanitationassessment.domain.TaskStatus;
 import com.example.sanitationassessment.dto.assessment.CreateAssessmentTaskRequest;
 import com.example.sanitationassessment.dto.assessment.QueryAssessmentTaskRequest;
+import com.example.sanitationassessment.dto.assessment.UpdateAssessmentTaskStatusRequest;
 import com.example.sanitationassessment.entity.AssessmentTaskEntity;
 import com.example.sanitationassessment.exception.BusinessException;
 import com.example.sanitationassessment.exception.TaskNotFoundException;
 import com.example.sanitationassessment.mapper.AssessmentTaskMapper;
 import com.example.sanitationassessment.vo.PageResult;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -23,7 +24,7 @@ import java.util.List;
 public class AssessmentTaskService {
     private final AssessmentTaskMapper assessmentTaskMapper;
 
-    public AssessmentTaskService(AssessmentTaskMapper assessmentTaskMapper, Mapper mapper) {
+    public AssessmentTaskService(AssessmentTaskMapper assessmentTaskMapper) {
         this.assessmentTaskMapper = assessmentTaskMapper;
     }
 
@@ -75,5 +76,34 @@ public class AssessmentTaskService {
         return new PageResult<>(records,
                 assessmentTaskEntityPage.getTotal(), assessmentTaskEntityPage.getCurrent(),
                 assessmentTaskEntityPage.getSize(), assessmentTaskEntityPage.getPages());
+    }
+
+    @Transactional
+    public AssessmentTask updateStatus(Long id, UpdateAssessmentTaskStatusRequest request) {
+        if (request.getStatus() == TaskStatus.COMPLETED && request.getScore() == null) {
+            throw new BusinessException("已完成考评任务必须提供分数");
+        }
+        if ((request.getStatus() == TaskStatus.PENDING || request.getStatus() ==
+                TaskStatus.PROCESSING) && request.getScore() != null) {
+            throw new BusinessException("待完成考评任务和处理中考评任务不需要提供分数");
+        }
+        AssessmentTaskEntity assessmentTaskEntity = assessmentTaskMapper.selectById(id);
+        if (assessmentTaskEntity == null) {
+            throw new TaskNotFoundException("未查询到该任务");
+        }
+        if (assessmentTaskEntity.getStatus() == TaskStatus.COMPLETED && request.getStatus() !=
+                TaskStatus.COMPLETED) {
+            throw new BusinessException("已完成考评任务不允许回退状态");
+        }
+        assessmentTaskEntity.setStatus(request.getStatus());
+        assessmentTaskEntity.setScore(request.getScore());
+        assessmentTaskEntity.setUpdatedAt(LocalDateTime.now());
+        int affectedRows = assessmentTaskMapper.updateById(assessmentTaskEntity);
+
+        if (affectedRows != 1) {
+            throw new BusinessException("更新考评任务失败");
+        }
+        return toDomain(assessmentTaskEntity);
+
     }
 }

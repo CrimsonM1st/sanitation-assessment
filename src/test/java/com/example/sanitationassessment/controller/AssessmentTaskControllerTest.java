@@ -9,8 +9,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -230,4 +229,265 @@ class AssessmentTaskControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
+
+    @Test
+    void updateStatusShouldBeSuccess() throws Exception {
+        String createRequestBody = """
+                {
+                  "departmentName": "环卫一部",
+                  "status": "PENDING",
+                  "score": null
+                }
+                """;
+
+        MvcResult createResult = mockMvc.perform(
+                        post("/assessment-tasks")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(createRequestBody))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String responseBody =
+                createResult.getResponse().getContentAsString();
+
+        Number id = JsonPath.read(responseBody, "$.data.id");
+
+        String updateRequestBody = """
+                {
+                  "status": "PROCESSING",
+                  "score": null
+                }
+                """;
+        mockMvc.perform(
+                        put("/assessment-tasks/{id}/status", id)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(updateRequestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.id").value(id))
+                .andExpect(jsonPath("$.data.status").value("PROCESSING"))
+                .andExpect(jsonPath("$.data.score").doesNotExist());
+
+        mockMvc.perform(get("/assessment-tasks/{id}", id.longValue()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PROCESSING"))
+                .andExpect(jsonPath("$.data.score").doesNotExist());
+    }
+
+    @Test
+    void updateStatusShouldReturn404WhenTaskDoesNotExist() throws Exception {
+        String requestBody = """
+                {
+                  "status": "PROCESSING",
+                  "score": null
+                }
+                """;
+
+        mockMvc.perform(
+                        put("/assessment-tasks/{id}/status", 999999999L)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(requestBody))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(404))
+                .andExpect(jsonPath("$.msg").value("未查询到该任务"))
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void updateStatusShouldRejectNullStatus() throws Exception {
+        String requestBody = """
+                {
+                  "status": null,
+                  "score": null
+                }
+                """;
+
+        mockMvc.perform(
+                        put("/assessment-tasks/{id}/status", 999999L)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.msg").value("任务状态不能为空"))
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void updateStatusShouldRejectScoreOver100() throws Exception {
+        String requestBody = """
+                {
+                  "status": "COMPLETED",
+                  "score": 101
+                }
+                """;
+
+        mockMvc.perform(
+                        put("/assessment-tasks/{id}/status", 999999L)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.msg").value("分数不能高于100"))
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void updateStatusToCompletedShouldRejectNullScore() throws Exception {
+        String createRequestBody = """
+                {
+                  "departmentName": "环卫一部",
+                  "status": "PENDING",
+                  "score": null
+                }
+                """;
+
+        MvcResult createResult = mockMvc.perform(
+                        post("/assessment-tasks")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(createRequestBody))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String responseBody =
+                createResult.getResponse().getContentAsString();
+
+        Number id = JsonPath.read(responseBody, "$.data.id");
+
+        String updateRequestBody = """
+                {
+                  "status": "COMPLETED",
+                  "score": null
+                }
+                """;
+        mockMvc.perform(
+                        put("/assessment-tasks/{id}/status", id)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(updateRequestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.msg").value("已完成考评任务必须提供分数"));
+    }
+
+
+    @Test
+    void updateStatusToProcessingShouldRejectNonNullScore() throws Exception {
+        String createRequestBody = """
+                {
+                  "departmentName": "环卫一部",
+                  "status": "PENDING",
+                  "score": null
+                }
+                """;
+
+        MvcResult createResult = mockMvc.perform(
+                        post("/assessment-tasks")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(createRequestBody))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String responseBody =
+                createResult.getResponse().getContentAsString();
+
+        Number id = JsonPath.read(responseBody, "$.data.id");
+
+        String updateRequestBody = """
+                {
+                  "status": "PROCESSING",
+                  "score": 80
+                }
+                """;
+        mockMvc.perform(
+                        put("/assessment-tasks/{id}/status", id)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(updateRequestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.msg").value("待完成考评任务和处理中考评任务不需要提供分数"));
+    }
+
+    @Test
+    void updateStatusFromProcessingToCompletedScore90ShouldBeSuccess() throws Exception {
+        String createRequestBody = """
+                {
+                  "departmentName": "环卫一部",
+                  "status": "PROCESSING",
+                  "score": null
+                }
+                """;
+
+        MvcResult createResult = mockMvc.perform(
+                        post("/assessment-tasks")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(createRequestBody))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String responseBody =
+                createResult.getResponse().getContentAsString();
+
+        Number id = JsonPath.read(responseBody, "$.data.id");
+
+        String updateRequestBody = """
+                {
+                  "status": "COMPLETED",
+                  "score": 90
+                }
+                """;
+        mockMvc.perform(
+                        put("/assessment-tasks/{id}/status", id)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(updateRequestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+
+        mockMvc.perform(get("/assessment-tasks/{id}", id.longValue()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.score").value(90));
+    }
+
+    @Test
+    void updateStatusFromCompletedToProcessingShouldBeRejected() throws Exception {
+        String createRequestBody = """
+                {
+                  "departmentName": "环卫一部",
+                  "status": "COMPLETED",
+                  "score": 90
+                }
+                """;
+
+        MvcResult createResult = mockMvc.perform(
+                        post("/assessment-tasks")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(createRequestBody))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String responseBody =
+                createResult.getResponse().getContentAsString();
+
+        Number id = JsonPath.read(responseBody, "$.data.id");
+
+        String updateRequestBody = """
+                {
+                  "status": "PROCESSING",
+                  "score": 90
+                }
+                """;
+        mockMvc.perform(
+                        put("/assessment-tasks/{id}/status", id)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(updateRequestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+
+
+        mockMvc.perform(get("/assessment-tasks/{id}", id.longValue()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.score").value(90));
+    }
+
 }
