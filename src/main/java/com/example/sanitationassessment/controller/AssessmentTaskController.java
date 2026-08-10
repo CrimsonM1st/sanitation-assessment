@@ -3,7 +3,9 @@ package com.example.sanitationassessment.controller;
 import com.example.sanitationassessment.common.Result;
 import com.example.sanitationassessment.domain.AssessmentTask;
 import com.example.sanitationassessment.dto.assessment.CreateAssessmentTaskRequest;
+import com.example.sanitationassessment.dto.assessment.QueryAssessmentTaskRequest;
 import com.example.sanitationassessment.service.AssessmentTaskService;
+import com.example.sanitationassessment.vo.PageResult;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,6 +28,10 @@ public class AssessmentTaskController {
     public Result<AssessmentTask> findById(@PathVariable("id") Long id) {
         AssessmentTask assessmentTask = assessmentTaskService.findById(id);
         return Result.success(assessmentTask);
+    }
 
+    @GetMapping
+    public Result<PageResult<AssessmentTask>> query(@Valid @ModelAttribute QueryAssessmentTaskRequest request) {
+        return Result.success(assessmentTaskService.query(request));
     }
 }

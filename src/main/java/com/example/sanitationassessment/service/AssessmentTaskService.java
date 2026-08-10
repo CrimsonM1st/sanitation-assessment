@@ -1,21 +1,29 @@
 package com.example.sanitationassessment.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.mapper.Mapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.sanitationassessment.domain.AssessmentTask;
 import com.example.sanitationassessment.domain.TaskStatus;
 import com.example.sanitationassessment.dto.assessment.CreateAssessmentTaskRequest;
+import com.example.sanitationassessment.dto.assessment.QueryAssessmentTaskRequest;
 import com.example.sanitationassessment.entity.AssessmentTaskEntity;
 import com.example.sanitationassessment.exception.BusinessException;
 import com.example.sanitationassessment.exception.TaskNotFoundException;
 import com.example.sanitationassessment.mapper.AssessmentTaskMapper;
+import com.example.sanitationassessment.vo.PageResult;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class AssessmentTaskService {
     private final AssessmentTaskMapper assessmentTaskMapper;
 
-    public AssessmentTaskService(AssessmentTaskMapper assessmentTaskMapper) {
+    public AssessmentTaskService(AssessmentTaskMapper assessmentTaskMapper, Mapper mapper) {
         this.assessmentTaskMapper = assessmentTaskMapper;
     }
 
@@ -48,5 +56,24 @@ public class AssessmentTaskService {
     private AssessmentTask toDomain(AssessmentTaskEntity assessmentTaskEntity) {
         return new AssessmentTask(assessmentTaskEntity.getId(), assessmentTaskEntity.getDepartmentName(),
                 assessmentTaskEntity.getStatus(), assessmentTaskEntity.getScore(), assessmentTaskEntity.getCreatedAt());
+    }
+
+    public PageResult<AssessmentTask> query(QueryAssessmentTaskRequest request) {
+        Page<AssessmentTaskEntity> page =
+                new Page<>(request.getPageNum(), request.getPageSize());
+        LambdaQueryWrapper<AssessmentTaskEntity> wrapper = Wrappers.<AssessmentTaskEntity>lambdaQuery()
+                .eq(StringUtils.hasText(request.getDepartmentName()), AssessmentTaskEntity::getDepartmentName,
+                        request.getDepartmentName())
+                .eq(request.getStatus() != null, AssessmentTaskEntity::getStatus, request.getStatus())
+                .orderByDesc(AssessmentTaskEntity::getCreatedAt)
+                .orderByDesc(AssessmentTaskEntity::getId);
+        Page<AssessmentTaskEntity> assessmentTaskEntityPage = assessmentTaskMapper.selectPage(page, wrapper);
+        List<AssessmentTask> records = assessmentTaskEntityPage.getRecords()
+                .stream()
+                .map(this::toDomain)
+                .toList();
+        return new PageResult<>(records,
+                assessmentTaskEntityPage.getTotal(), assessmentTaskEntityPage.getCurrent(),
+                assessmentTaskEntityPage.getSize(), assessmentTaskEntityPage.getPages());
     }
 }

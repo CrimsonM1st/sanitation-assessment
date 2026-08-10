@@ -155,4 +155,79 @@ class AssessmentTaskControllerTest {
                 .andExpect(jsonPath("$.msg").value("分数不能低于0"))
                 .andExpect(jsonPath("$.data").doesNotExist());
     }
+
+    @Test
+    void queryShouldReturnDefaultPage() throws Exception {
+        mockMvc.perform(get("/assessment-tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.records").isArray())
+                .andExpect(jsonPath("$.data.pageNum").value(1))
+                .andExpect(jsonPath("$.data.pageSize").value(10))
+                .andExpect(jsonPath("$.data.total").isNumber())
+                .andExpect(jsonPath("$.data.pages").isNumber());
+    }
+
+    @Test
+    void queryShouldFilterByDepartmentNameAndStatus() throws Exception {
+        String departmentName = "测试部门-" + System.nanoTime();
+
+        String completedTask = """
+                {
+                  "departmentName": "%s",
+                  "status": "COMPLETED",
+                  "score": 90
+                }
+                """.formatted(departmentName);
+
+        String pendingTask = """
+                {
+                  "departmentName": "%s",
+                  "status": "PENDING"
+                }
+                """.formatted(departmentName);
+
+        mockMvc.perform(post("/assessment-tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(completedTask))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/assessment-tasks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(pendingTask))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/assessment-tasks")
+                        .param("departmentName", departmentName)
+                        .param("status", "COMPLETED")
+                        .param("pageNum", "1")
+                        .param("pageSize", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.records[0].departmentName")
+                        .value(departmentName))
+                .andExpect(jsonPath("$.data.records[0].status")
+                        .value("COMPLETED"))
+                .andExpect(jsonPath("$.data.records[0].score").value(90));
+    }
+
+    @Test
+    void queryShouldRejectInvalidPageNum() throws Exception {
+        mockMvc.perform(get("/assessment-tasks")
+                        .param("pageNum", "0")
+                        .param("pageSize", "10"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+    }
+
+    @Test
+    void queryShouldRejectOversizedPageSize() throws Exception {
+        mockMvc.perform(get("/assessment-tasks")
+                        .param("pageNum", "1")
+                        .param("pageSize", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+    }
 }
