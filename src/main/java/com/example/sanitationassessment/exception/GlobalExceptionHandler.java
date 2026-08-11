@@ -32,5 +32,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.error(404, exception.getMessage()));
     }
 
-
+    @ExceptionHandler(ConcurrentUpdateException.class)
+    public ResponseEntity<Result<Void>> handleConcurrentUpdateException(ConcurrentUpdateException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Result.error(409, exception.getMessage()));
+    }
 }

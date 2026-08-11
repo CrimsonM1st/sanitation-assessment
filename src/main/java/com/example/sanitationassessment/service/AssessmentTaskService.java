@@ -10,6 +10,7 @@ import com.example.sanitationassessment.dto.assessment.QueryAssessmentTaskReques
 import com.example.sanitationassessment.dto.assessment.UpdateAssessmentTaskStatusRequest;
 import com.example.sanitationassessment.entity.AssessmentTaskEntity;
 import com.example.sanitationassessment.exception.BusinessException;
+import com.example.sanitationassessment.exception.ConcurrentUpdateException;
 import com.example.sanitationassessment.exception.TaskNotFoundException;
 import com.example.sanitationassessment.mapper.AssessmentTaskMapper;
 import com.example.sanitationassessment.vo.PageResult;
@@ -101,7 +102,7 @@ public class AssessmentTaskService {
         int affectedRows = assessmentTaskMapper.updateById(assessmentTaskEntity);
 
         if (affectedRows != 1) {
-            throw new BusinessException("更新考评任务失败");
+            throw new ConcurrentUpdateException("任务已被其他请求修改，请刷新后重试");
         }
         return toDomain(assessmentTaskEntity);
 

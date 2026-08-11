@@ -8,6 +8,7 @@ CREATE TABLE assessment_task
     score           TINYINT,
     created_at      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `version`       INT          NOT NULL DEFAULT 0,
 
     CONSTRAINT chk_assessment_task_score
         CHECK (score IS NULL OR score BETWEEN 0 AND 100),

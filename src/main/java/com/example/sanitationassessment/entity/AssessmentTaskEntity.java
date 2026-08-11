@@ -1,9 +1,6 @@
 package com.example.sanitationassessment.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
 import com.example.sanitationassessment.domain.TaskStatus;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -28,4 +25,6 @@ public class AssessmentTaskEntity {
     private LocalDateTime createdAt;
     @TableField("updated_at")
     private LocalDateTime updatedAt;
+    @Version
+    private Integer version;
 }

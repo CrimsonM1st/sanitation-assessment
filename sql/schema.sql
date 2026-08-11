@@ -7,6 +7,7 @@ CREATE TABLE `assessment_task`
     `score`           TINYINT UNSIGNED COMMENT '分数',
     `created_at`      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
     `updated_at`      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
+    `version`         INT         NOT NULL DEFAULT 0 COMMENT '版本',
     PRIMARY KEY (`id`),
     KEY `idx_department_status_created_at`
         (`department_name`, `status`, `created_at`),
