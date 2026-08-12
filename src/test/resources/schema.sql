@@ -16,3 +16,14 @@ CREATE TABLE assessment_task
     CONSTRAINT chk_assessment_task_completed_score
         CHECK (status <> 'COMPLETED' OR score IS NOT NULL)
 );
+
+DROP TABLE IF EXISTS assessment_task_audit_log;
+
+CREATE TABLE `assessment_task_audit_log`
+(
+    id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+    task_id    BIGINT       NOT NULL,
+    action     VARCHAR(20)  NOT NULL,
+    detail     VARCHAR(50)  NOT NULL,
+    created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

@@ -99,30 +99,11 @@ class AssessmentTaskControllerTest {
 
     @Test
     void shouldFindCreatedTaskById() throws Exception {
-        String requestBody = """
-                {
-                  "departmentName": "环卫二部",
-                  "status": "PROCESSING",
-                  "score": null
-                }
-                """;
-
-        MvcResult createResult = mockMvc.perform(
-                        post("/assessment-tasks")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(requestBody))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        String responseBody =
-                createResult.getResponse().getContentAsString();
-
-        Number id = JsonPath.read(responseBody, "$.data.id");
-
-        mockMvc.perform(get("/assessment-tasks/{id}", id.longValue()))
+        long id = createTaskAndReturnId("环卫二部", "PROCESSING", null);
+        mockMvc.perform(get("/assessment-tasks/{id}", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.id").value(id.longValue()))
+                .andExpect(jsonPath("$.data.id").value(id))
                 .andExpect(jsonPath("$.data.departmentName").value("环卫二部"))
                 .andExpect(jsonPath("$.data.status").value("PROCESSING"));
     }
@@ -232,26 +213,7 @@ class AssessmentTaskControllerTest {
 
     @Test
     void updateStatusShouldBeSuccess() throws Exception {
-        String createRequestBody = """
-                {
-                  "departmentName": "环卫一部",
-                  "status": "PENDING",
-                  "score": null
-                }
-                """;
-
-        MvcResult createResult = mockMvc.perform(
-                        post("/assessment-tasks")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(createRequestBody))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        String responseBody =
-                createResult.getResponse().getContentAsString();
-
-        Number id = JsonPath.read(responseBody, "$.data.id");
-
+        long id = createTaskAndReturnId("环卫一部", "PENDING", null);
         String updateRequestBody = """
                 {
                   "status": "PROCESSING",
@@ -268,7 +230,7 @@ class AssessmentTaskControllerTest {
                 .andExpect(jsonPath("$.data.status").value("PROCESSING"))
                 .andExpect(jsonPath("$.data.score").doesNotExist());
 
-        mockMvc.perform(get("/assessment-tasks/{id}", id.longValue()))
+        mockMvc.perform(get("/assessment-tasks/{id}", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("PROCESSING"))
                 .andExpect(jsonPath("$.data.score").doesNotExist());
@@ -333,26 +295,7 @@ class AssessmentTaskControllerTest {
 
     @Test
     void updateStatusToCompletedShouldRejectNullScore() throws Exception {
-        String createRequestBody = """
-                {
-                  "departmentName": "环卫一部",
-                  "status": "PENDING",
-                  "score": null
-                }
-                """;
-
-        MvcResult createResult = mockMvc.perform(
-                        post("/assessment-tasks")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(createRequestBody))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        String responseBody =
-                createResult.getResponse().getContentAsString();
-
-        Number id = JsonPath.read(responseBody, "$.data.id");
-
+        long id = createTaskAndReturnId("环卫一部", "PENDING", null);
         String updateRequestBody = """
                 {
                   "status": "COMPLETED",
@@ -371,26 +314,7 @@ class AssessmentTaskControllerTest {
 
     @Test
     void updateStatusToProcessingShouldRejectNonNullScore() throws Exception {
-        String createRequestBody = """
-                {
-                  "departmentName": "环卫一部",
-                  "status": "PENDING",
-                  "score": null
-                }
-                """;
-
-        MvcResult createResult = mockMvc.perform(
-                        post("/assessment-tasks")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(createRequestBody))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        String responseBody =
-                createResult.getResponse().getContentAsString();
-
-        Number id = JsonPath.read(responseBody, "$.data.id");
-
+        long id = createTaskAndReturnId("环卫一部", "PENDING", null);
         String updateRequestBody = """
                 {
                   "status": "PROCESSING",
@@ -408,26 +332,7 @@ class AssessmentTaskControllerTest {
 
     @Test
     void updateStatusFromProcessingToCompletedScore90ShouldBeSuccess() throws Exception {
-        String createRequestBody = """
-                {
-                  "departmentName": "环卫一部",
-                  "status": "PROCESSING",
-                  "score": null
-                }
-                """;
-
-        MvcResult createResult = mockMvc.perform(
-                        post("/assessment-tasks")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(createRequestBody))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        String responseBody =
-                createResult.getResponse().getContentAsString();
-
-        Number id = JsonPath.read(responseBody, "$.data.id");
-
+        long id = createTaskAndReturnId("环卫一部", "PROCESSING", null);
         String updateRequestBody = """
                 {
                   "status": "COMPLETED",
@@ -442,7 +347,7 @@ class AssessmentTaskControllerTest {
                 .andExpect(jsonPath("$.code").value(200));
 
 
-        mockMvc.perform(get("/assessment-tasks/{id}", id.longValue()))
+        mockMvc.perform(get("/assessment-tasks/{id}", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.score").value(90));
@@ -450,25 +355,7 @@ class AssessmentTaskControllerTest {
 
     @Test
     void updateStatusFromCompletedToProcessingShouldBeRejected() throws Exception {
-        String createRequestBody = """
-                {
-                  "departmentName": "环卫一部",
-                  "status": "COMPLETED",
-                  "score": 90
-                }
-                """;
-
-        MvcResult createResult = mockMvc.perform(
-                        post("/assessment-tasks")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(createRequestBody))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        String responseBody =
-                createResult.getResponse().getContentAsString();
-
-        Number id = JsonPath.read(responseBody, "$.data.id");
+        long id = createTaskAndReturnId("环卫一部", "COMPLETED", 90);
 
         String updateRequestBody = """
                 {
@@ -484,10 +371,38 @@ class AssessmentTaskControllerTest {
                 .andExpect(jsonPath("$.code").value(400));
 
 
-        mockMvc.perform(get("/assessment-tasks/{id}", id.longValue()))
+        mockMvc.perform(get("/assessment-tasks/{id}", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.score").value(90));
     }
 
+    private long createTaskAndReturnId(
+            String departmentName,
+            String status,
+            Integer score) throws Exception {
+        String scoreJson = score == null
+                ? "null"
+                : score.toString();
+        String createRequestBody = """
+                {
+                  "departmentName": "%s",
+                  "status": "%s",
+                  "score": %s
+                }
+                """.formatted(departmentName, status, scoreJson);
+
+        MvcResult createResult = mockMvc.perform(
+                        post("/assessment-tasks")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(createRequestBody))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String responseBody =
+                createResult.getResponse().getContentAsString();
+
+        Number id = JsonPath.read(responseBody, "$.data.id");
+        return id.longValue();
+    }
 }

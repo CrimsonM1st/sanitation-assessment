@@ -25,3 +25,17 @@ CREATE TABLE `assessment_task`
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
     COMMENT = '考评任务表';
+DROP TABLE IF EXISTS assessment_task_audit_log;
+CREATE TABLE `assessment_task_audit_log`
+(
+    id         BIGINT UNSIGNED AUTO_INCREMENT COMMENT 'id',
+    task_id    BIGINT UNSIGNED NOT NULL COMMENT '任务id',
+    action     VARCHAR(20)     NOT NULL COMMENT '操作',
+    detail     VARCHAR(50)     NOT NULL COMMENT '操作细节',
+    created_at DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_task_id_created_at`
+        (`task_id`, `created_at`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+    COMMENT = '审计日志表';

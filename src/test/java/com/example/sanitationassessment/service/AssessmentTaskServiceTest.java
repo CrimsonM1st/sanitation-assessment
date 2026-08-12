@@ -4,6 +4,7 @@ import com.example.sanitationassessment.domain.TaskStatus;
 import com.example.sanitationassessment.dto.assessment.UpdateAssessmentTaskStatusRequest;
 import com.example.sanitationassessment.entity.AssessmentTaskEntity;
 import com.example.sanitationassessment.exception.ConcurrentUpdateException;
+import com.example.sanitationassessment.mapper.AssessmentTaskAuditLogMapper;
 import com.example.sanitationassessment.mapper.AssessmentTaskMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +24,9 @@ class AssessmentTaskServiceTest {
 
     @Mock
     private AssessmentTaskMapper assessmentTaskMapper;
+
+    @Mock
+    private AssessmentTaskAuditLogMapper assessmentTaskAuditLogMapper;
 
     @InjectMocks
     private AssessmentTaskService assessmentTaskService;

@@ -8,10 +8,12 @@ import com.example.sanitationassessment.domain.TaskStatus;
 import com.example.sanitationassessment.dto.assessment.CreateAssessmentTaskRequest;
 import com.example.sanitationassessment.dto.assessment.QueryAssessmentTaskRequest;
 import com.example.sanitationassessment.dto.assessment.UpdateAssessmentTaskStatusRequest;
+import com.example.sanitationassessment.entity.AssessmentTaskAuditLogEntity;
 import com.example.sanitationassessment.entity.AssessmentTaskEntity;
 import com.example.sanitationassessment.exception.BusinessException;
 import com.example.sanitationassessment.exception.ConcurrentUpdateException;
 import com.example.sanitationassessment.exception.TaskNotFoundException;
+import com.example.sanitationassessment.mapper.AssessmentTaskAuditLogMapper;
 import com.example.sanitationassessment.mapper.AssessmentTaskMapper;
 import com.example.sanitationassessment.vo.PageResult;
 import org.springframework.stereotype.Service;
@@ -24,11 +26,14 @@ import java.util.List;
 @Service
 public class AssessmentTaskService {
     private final AssessmentTaskMapper assessmentTaskMapper;
+    private final AssessmentTaskAuditLogMapper assessmentTaskAuditLogMapper;
 
-    public AssessmentTaskService(AssessmentTaskMapper assessmentTaskMapper) {
+    public AssessmentTaskService(AssessmentTaskMapper assessmentTaskMapper, AssessmentTaskAuditLogMapper assessmentTaskAuditLogMapper) {
         this.assessmentTaskMapper = assessmentTaskMapper;
+        this.assessmentTaskAuditLogMapper = assessmentTaskAuditLogMapper;
     }
 
+    @Transactional
     public AssessmentTask create(CreateAssessmentTaskRequest request) {
         if (request.getStatus() == TaskStatus.COMPLETED && request.getScore() == null) {
             throw new BusinessException("已完成任务必须提供分数");
@@ -43,6 +48,16 @@ public class AssessmentTaskService {
         int affectedRows = assessmentTaskMapper.insert(assessmentTaskEntity);
         if (affectedRows != 1) {
             throw new BusinessException("创建考评任务失败");
+        }
+        //创建任务时写入审计日志
+        AssessmentTaskAuditLogEntity assessmentTaskAuditLogEntity = new AssessmentTaskAuditLogEntity();
+        assessmentTaskAuditLogEntity.setTaskId(assessmentTaskEntity.getId());
+        assessmentTaskAuditLogEntity.setAction("CREATE");
+        assessmentTaskAuditLogEntity.setDetail("创建考评任务");
+        assessmentTaskAuditLogEntity.setCreatedAt(LocalDateTime.now());
+        affectedRows = assessmentTaskAuditLogMapper.insert(assessmentTaskAuditLogEntity);
+        if (affectedRows != 1) {
+            throw new BusinessException("记录审计日志失败");
         }
         return toDomain(assessmentTaskEntity);
     }
