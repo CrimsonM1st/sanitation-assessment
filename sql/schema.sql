@@ -11,6 +11,8 @@ CREATE TABLE `assessment_task`
     PRIMARY KEY (`id`),
     KEY `idx_department_status_created_at`
         (`department_name`, `status`, `created_at`),
+    KEY `idx_status_created_at_id`
+        (`status`, `created_at`, `id`),
     CONSTRAINT `chk_assessment_task_score`
         CHECK (`score` IS NULL OR `score` BETWEEN 0 AND 100),
     CONSTRAINT `chk_assessment_task_completed_score`
