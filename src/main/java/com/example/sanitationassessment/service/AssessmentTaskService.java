@@ -3,6 +3,7 @@ package com.example.sanitationassessment.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.example.sanitationassessment.cache.AssessmentTaskCache;
 import com.example.sanitationassessment.domain.AssessmentTask;
 import com.example.sanitationassessment.domain.TaskStatus;
 import com.example.sanitationassessment.dto.assessment.CreateAssessmentTaskRequest;
@@ -22,15 +23,18 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class AssessmentTaskService {
     private final AssessmentTaskMapper assessmentTaskMapper;
     private final AssessmentTaskAuditLogMapper assessmentTaskAuditLogMapper;
+    private final AssessmentTaskCache assessmentTaskCache;
 
-    public AssessmentTaskService(AssessmentTaskMapper assessmentTaskMapper, AssessmentTaskAuditLogMapper assessmentTaskAuditLogMapper) {
+    public AssessmentTaskService(AssessmentTaskMapper assessmentTaskMapper, AssessmentTaskAuditLogMapper assessmentTaskAuditLogMapper, AssessmentTaskCache assessmentTaskCache) {
         this.assessmentTaskMapper = assessmentTaskMapper;
         this.assessmentTaskAuditLogMapper = assessmentTaskAuditLogMapper;
+        this.assessmentTaskCache = assessmentTaskCache;
     }
 
     @Transactional
@@ -63,14 +67,20 @@ public class AssessmentTaskService {
     }
 
     public AssessmentTask findById(Long id) {
+        Optional<AssessmentTask> assessmentTaskOptional = assessmentTaskCache.get(id);
+        if (assessmentTaskOptional.isPresent()) {
+            return assessmentTaskOptional.get();
+        }
         AssessmentTaskEntity assessmentTaskEntity = assessmentTaskMapper.selectById(id);
         if (assessmentTaskEntity == null) {
             throw new TaskNotFoundException("考评任务不存在，id=" + id);
         }
-        return toDomain(assessmentTaskEntity);
+        AssessmentTask domain = toDomain(assessmentTaskEntity);
+        assessmentTaskCache.put(domain);
+        return domain;
     }
 
-    private AssessmentTask toDomain(AssessmentTaskEntity assessmentTaskEntity) {
+    public AssessmentTask toDomain(AssessmentTaskEntity assessmentTaskEntity) {
         return new AssessmentTask(assessmentTaskEntity.getId(), assessmentTaskEntity.getDepartmentName(),
                 assessmentTaskEntity.getStatus(), assessmentTaskEntity.getScore(), assessmentTaskEntity.getCreatedAt());
     }
@@ -119,6 +129,7 @@ public class AssessmentTaskService {
         if (affectedRows != 1) {
             throw new ConcurrentUpdateException("任务已被其他请求修改，请刷新后重试");
         }
+        assessmentTaskCache.evict(id);
         return toDomain(assessmentTaskEntity);
 
     }
