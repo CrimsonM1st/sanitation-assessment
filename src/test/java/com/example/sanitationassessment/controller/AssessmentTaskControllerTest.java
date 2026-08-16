@@ -1,6 +1,7 @@
 package com.example.sanitationassessment.controller;
 
 import com.example.sanitationassessment.cache.AssessmentTaskCache;
+import com.example.sanitationassessment.cache.AssessmentTaskCacheResult;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,8 +12,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-
-import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
@@ -31,7 +30,7 @@ class AssessmentTaskControllerTest {
     @BeforeEach
     void setUpCacheMiss() {
         when(assessmentTaskCache.get(anyLong()))
-                .thenReturn(Optional.empty());
+                .thenReturn(AssessmentTaskCacheResult.miss());
     }
 
     @Test

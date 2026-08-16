@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
-import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Component
 public class AssessmentTaskCache {
@@ -19,8 +19,13 @@ public class AssessmentTaskCache {
     private static final String KEY_PREFIX =
             "sanitation:assessment-task:";
 
-    private static final Duration TTL =
+    private static final Duration BASE_TTL =
             Duration.ofMinutes(10);
+
+    private static final String NULL_VALUE = "__NULL__";
+
+    private static final Duration NULL_TTL =
+            Duration.ofMinutes(1);
 
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
@@ -36,7 +41,14 @@ public class AssessmentTaskCache {
         return KEY_PREFIX + id;
     }
 
-    public Optional<AssessmentTask> get(Long id) {
+    private Duration normalTtl() {
+        long randomSeconds = ThreadLocalRandom.current()
+                .nextLong(0, 121);
+
+        return BASE_TTL.plusSeconds(randomSeconds);
+    }
+
+    public AssessmentTaskCacheResult get(Long id) {
         String key = buildKey(id);
 
         try {
@@ -45,7 +57,10 @@ public class AssessmentTaskCache {
                     .get(key);
 
             if (!StringUtils.hasText(json)) {
-                return Optional.empty();
+                return AssessmentTaskCacheResult.miss();
+            }
+            if (NULL_VALUE.equals(json)) {
+                return AssessmentTaskCacheResult.hit(null);
             }
 
             AssessmentTask task = objectMapper.readValue(
@@ -53,10 +68,10 @@ public class AssessmentTaskCache {
                     AssessmentTask.class
             );
 
-            return Optional.of(task);
+            return AssessmentTaskCacheResult.hit(task);
         } catch (Exception exception) {
             log.warn("读取任务缓存失败，key={}", key, exception);
-            return Optional.empty();
+            return AssessmentTaskCacheResult.miss();
         }
     }
 
@@ -64,7 +79,7 @@ public class AssessmentTaskCache {
         String key = buildKey(task.getId());
         try {
             String json = objectMapper.writeValueAsString(task);
-            stringRedisTemplate.opsForValue().set(key, json, TTL);
+            stringRedisTemplate.opsForValue().set(key, json, normalTtl());
         } catch (Exception exception) {
             log.warn("写入任务缓存失败，key={}", key, exception);
         }
@@ -77,6 +92,20 @@ public class AssessmentTaskCache {
             stringRedisTemplate.delete(key);
         } catch (RuntimeException exception) {
             log.warn("删除任务缓存失败，key={}", key, exception);
+        }
+    }
+
+    public void putNull(Long id) {
+        String key = buildKey(id);
+
+        try {
+            stringRedisTemplate.opsForValue().set(
+                    key,
+                    NULL_VALUE,
+                    NULL_TTL
+            );
+        } catch (RuntimeException exception) {
+            log.warn("写入任务空值缓存失败，key={}", key, exception);
         }
     }
 }

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.sanitationassessment.cache.AssessmentTaskCache;
+import com.example.sanitationassessment.cache.AssessmentTaskCacheResult;
 import com.example.sanitationassessment.domain.AssessmentTask;
 import com.example.sanitationassessment.domain.TaskStatus;
 import com.example.sanitationassessment.dto.assessment.CreateAssessmentTaskRequest;
@@ -11,30 +12,33 @@ import com.example.sanitationassessment.dto.assessment.QueryAssessmentTaskReques
 import com.example.sanitationassessment.dto.assessment.UpdateAssessmentTaskStatusRequest;
 import com.example.sanitationassessment.entity.AssessmentTaskAuditLogEntity;
 import com.example.sanitationassessment.entity.AssessmentTaskEntity;
+import com.example.sanitationassessment.event.AssessmentTaskUpdatedEvent;
 import com.example.sanitationassessment.exception.BusinessException;
 import com.example.sanitationassessment.exception.ConcurrentUpdateException;
 import com.example.sanitationassessment.exception.TaskNotFoundException;
 import com.example.sanitationassessment.mapper.AssessmentTaskAuditLogMapper;
 import com.example.sanitationassessment.mapper.AssessmentTaskMapper;
 import com.example.sanitationassessment.vo.PageResult;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 public class AssessmentTaskService {
     private final AssessmentTaskMapper assessmentTaskMapper;
     private final AssessmentTaskAuditLogMapper assessmentTaskAuditLogMapper;
     private final AssessmentTaskCache assessmentTaskCache;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public AssessmentTaskService(AssessmentTaskMapper assessmentTaskMapper, AssessmentTaskAuditLogMapper assessmentTaskAuditLogMapper, AssessmentTaskCache assessmentTaskCache) {
+    public AssessmentTaskService(AssessmentTaskMapper assessmentTaskMapper, AssessmentTaskAuditLogMapper assessmentTaskAuditLogMapper, AssessmentTaskCache assessmentTaskCache, ApplicationEventPublisher eventPublisher) {
         this.assessmentTaskMapper = assessmentTaskMapper;
         this.assessmentTaskAuditLogMapper = assessmentTaskAuditLogMapper;
         this.assessmentTaskCache = assessmentTaskCache;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -67,12 +71,18 @@ public class AssessmentTaskService {
     }
 
     public AssessmentTask findById(Long id) {
-        Optional<AssessmentTask> assessmentTaskOptional = assessmentTaskCache.get(id);
-        if (assessmentTaskOptional.isPresent()) {
-            return assessmentTaskOptional.get();
+        AssessmentTaskCacheResult assessmentTaskCacheResult = assessmentTaskCache.get(id);
+        if (assessmentTaskCacheResult.hit() && assessmentTaskCacheResult.task() != null) {
+            return assessmentTaskCacheResult.task();
+        }
+        if (assessmentTaskCacheResult.hit()) {
+            throw new TaskNotFoundException(
+                    "考评任务不存在，id=" + id
+            );
         }
         AssessmentTaskEntity assessmentTaskEntity = assessmentTaskMapper.selectById(id);
         if (assessmentTaskEntity == null) {
+            assessmentTaskCache.putNull(id);
             throw new TaskNotFoundException("考评任务不存在，id=" + id);
         }
         AssessmentTask domain = toDomain(assessmentTaskEntity);
@@ -129,7 +139,9 @@ public class AssessmentTaskService {
         if (affectedRows != 1) {
             throw new ConcurrentUpdateException("任务已被其他请求修改，请刷新后重试");
         }
-        assessmentTaskCache.evict(id);
+        eventPublisher.publishEvent(
+                new AssessmentTaskUpdatedEvent(id)
+        );
         return toDomain(assessmentTaskEntity);
 
     }

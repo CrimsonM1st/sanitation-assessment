@@ -1,11 +1,14 @@
 package com.example.sanitationassessment.service;
 
 import com.example.sanitationassessment.cache.AssessmentTaskCache;
+import com.example.sanitationassessment.cache.AssessmentTaskCacheResult;
 import com.example.sanitationassessment.domain.AssessmentTask;
 import com.example.sanitationassessment.domain.TaskStatus;
 import com.example.sanitationassessment.dto.assessment.UpdateAssessmentTaskStatusRequest;
 import com.example.sanitationassessment.entity.AssessmentTaskEntity;
+import com.example.sanitationassessment.event.AssessmentTaskUpdatedEvent;
 import com.example.sanitationassessment.exception.ConcurrentUpdateException;
+import com.example.sanitationassessment.exception.TaskNotFoundException;
 import com.example.sanitationassessment.mapper.AssessmentTaskAuditLogMapper;
 import com.example.sanitationassessment.mapper.AssessmentTaskMapper;
 import org.junit.jupiter.api.Test;
@@ -13,8 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Optional;
+import org.springframework.context.ApplicationEventPublisher;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -32,6 +34,9 @@ class AssessmentTaskServiceTest {
 
     @Mock
     private AssessmentTaskCache assessmentTaskCache;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private AssessmentTaskService assessmentTaskService;
@@ -65,18 +70,17 @@ class AssessmentTaskServiceTest {
         verify(assessmentTaskMapper).selectById(1L);
         verify(assessmentTaskMapper)
                 .updateById(any(AssessmentTaskEntity.class));
-        verify(assessmentTaskCache, never()).evict(anyLong());
+        verify(eventPublisher, never()).publishEvent(any(AssessmentTaskUpdatedEvent.class));
     }
 
     @Test
     void findByIdShouldReturnCachedTaskWhenCacheHits() {
-        Optional<AssessmentTask> cachedTask = Optional.of(new AssessmentTask());
+        AssessmentTask assessmentTask = new AssessmentTask();
         when(assessmentTaskCache.get(1L))
-                .thenReturn(cachedTask);
-        Optional<AssessmentTask> assessmentTask = assessmentTaskCache.get(1L);
+                .thenReturn(AssessmentTaskCacheResult.hit(assessmentTask));
         AssessmentTask byId = assessmentTaskService.findById(1L);
         verifyNoInteractions(assessmentTaskMapper);
-        assessmentTask.ifPresent(task -> assertSame(task, byId));
+        assertSame(assessmentTask, byId);
     }
 
     @Test
@@ -86,7 +90,7 @@ class AssessmentTaskServiceTest {
         entity.setStatus(TaskStatus.PROCESSING);
         entity.setVersion(0);
         when(assessmentTaskCache.get(1L))
-                .thenReturn(Optional.empty());
+                .thenReturn(AssessmentTaskCacheResult.miss());
         when(assessmentTaskMapper.selectById(1L))
                 .thenReturn(entity);
         AssessmentTask result = assessmentTaskService.findById(1L);
@@ -100,7 +104,7 @@ class AssessmentTaskServiceTest {
     }
 
     @Test
-    void updateStatusShouldEvictCacheWhenUpdateSucceeds() {
+    void updateStatusShouldPublishEventWhenUpdateSucceeds() {
         AssessmentTaskEntity assessmentTaskEntity = new AssessmentTaskEntity();
         assessmentTaskEntity.setId(1L);
         assessmentTaskEntity.setStatus(TaskStatus.PROCESSING);
@@ -122,7 +126,36 @@ class AssessmentTaskServiceTest {
 
         verify(assessmentTaskMapper)
                 .updateById(any(AssessmentTaskEntity.class));
-        verify(assessmentTaskCache).evict(1L);
+        verify(eventPublisher).publishEvent(any(AssessmentTaskUpdatedEvent.class));
+    }
+
+    @Test
+    void findByIdShouldNotQueryDatabaseWhenNullCacheHits() {
+        when(assessmentTaskCache.get(1L))
+                .thenReturn(AssessmentTaskCacheResult.hit(null));
+
+        assertThrows(
+                TaskNotFoundException.class,
+                () -> assessmentTaskService.findById(1L)
+        );
+
+        verifyNoInteractions(assessmentTaskMapper);
+    }
+
+    @Test
+    void findByIdShouldCacheNullWhenDatabaseTaskDoesNotExist() {
+        when(assessmentTaskCache.get(1L))
+                .thenReturn(AssessmentTaskCacheResult.miss());
+        when(assessmentTaskMapper.selectById(1L))
+                .thenReturn(null);
+
+        assertThrows(
+                TaskNotFoundException.class,
+                () -> assessmentTaskService.findById(1L)
+        );
+
+        verify(assessmentTaskMapper).selectById(1L);
+        verify(assessmentTaskCache).putNull(1L);
     }
 }
 
