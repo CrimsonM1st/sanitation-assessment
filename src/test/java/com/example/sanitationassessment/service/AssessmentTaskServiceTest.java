@@ -4,11 +4,15 @@ import com.example.sanitationassessment.cache.AssessmentTaskCache;
 import com.example.sanitationassessment.cache.AssessmentTaskCacheResult;
 import com.example.sanitationassessment.domain.AssessmentTask;
 import com.example.sanitationassessment.domain.TaskStatus;
+import com.example.sanitationassessment.dto.assessment.CreateAssessmentTaskRequest;
 import com.example.sanitationassessment.dto.assessment.UpdateAssessmentTaskStatusRequest;
+import com.example.sanitationassessment.entity.AssessmentTaskAuditLogEntity;
 import com.example.sanitationassessment.entity.AssessmentTaskEntity;
-import com.example.sanitationassessment.event.AssessmentTaskUpdatedEvent;
+import com.example.sanitationassessment.event.AssessmentTaskChangedEvent;
+import com.example.sanitationassessment.exception.BusinessException;
 import com.example.sanitationassessment.exception.ConcurrentUpdateException;
 import com.example.sanitationassessment.exception.TaskNotFoundException;
+import com.example.sanitationassessment.lock.RedisLock;
 import com.example.sanitationassessment.mapper.AssessmentTaskAuditLogMapper;
 import com.example.sanitationassessment.mapper.AssessmentTaskMapper;
 import org.junit.jupiter.api.Test;
@@ -17,6 +21,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -37,6 +43,9 @@ class AssessmentTaskServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private RedisLock redisLock;
 
     @InjectMocks
     private AssessmentTaskService assessmentTaskService;
@@ -70,7 +79,7 @@ class AssessmentTaskServiceTest {
         verify(assessmentTaskMapper).selectById(1L);
         verify(assessmentTaskMapper)
                 .updateById(any(AssessmentTaskEntity.class));
-        verify(eventPublisher, never()).publishEvent(any(AssessmentTaskUpdatedEvent.class));
+        verify(eventPublisher, never()).publishEvent(any(AssessmentTaskChangedEvent.class));
     }
 
     @Test
@@ -93,14 +102,22 @@ class AssessmentTaskServiceTest {
                 .thenReturn(AssessmentTaskCacheResult.miss());
         when(assessmentTaskMapper.selectById(1L))
                 .thenReturn(entity);
+        when(redisLock.tryLock(
+                eq("sanitation:lock:assessment-task:1"),
+                any(Duration.class)
+        )).thenReturn("token-1");
         AssessmentTask result = assessmentTaskService.findById(1L);
 
         assertEquals(1L, result.getId());
         assertEquals(TaskStatus.PROCESSING, result.getStatus());
 
-        verify(assessmentTaskCache).get(1L);
+        verify(assessmentTaskCache, times(2)).get(1L);
         verify(assessmentTaskMapper).selectById(1L);
         verify(assessmentTaskCache).put(result);
+        verify(redisLock).unlock(
+                "sanitation:lock:assessment-task:1",
+                "token-1"
+        );
     }
 
     @Test
@@ -126,7 +143,7 @@ class AssessmentTaskServiceTest {
 
         verify(assessmentTaskMapper)
                 .updateById(any(AssessmentTaskEntity.class));
-        verify(eventPublisher).publishEvent(any(AssessmentTaskUpdatedEvent.class));
+        verify(eventPublisher).publishEvent(any(AssessmentTaskChangedEvent.class));
     }
 
     @Test
@@ -148,7 +165,10 @@ class AssessmentTaskServiceTest {
                 .thenReturn(AssessmentTaskCacheResult.miss());
         when(assessmentTaskMapper.selectById(1L))
                 .thenReturn(null);
-
+        when(redisLock.tryLock(
+                eq("sanitation:lock:assessment-task:1"),
+                any(Duration.class)
+        )).thenReturn("token-1");
         assertThrows(
                 TaskNotFoundException.class,
                 () -> assessmentTaskService.findById(1L)
@@ -156,6 +176,110 @@ class AssessmentTaskServiceTest {
 
         verify(assessmentTaskMapper).selectById(1L);
         verify(assessmentTaskCache).putNull(1L);
+        verify(redisLock).unlock(
+                "sanitation:lock:assessment-task:1",
+                "token-1"
+        );
+    }
+
+    @Test
+    void whenCreateSuccessShouldPublishEvent() {
+        when(assessmentTaskMapper.insert(
+                any(AssessmentTaskEntity.class)))
+                .thenAnswer(invocation -> {
+                    AssessmentTaskEntity insertedEntity =
+                            invocation.getArgument(0);
+                    insertedEntity.setId(1L);
+                    return 1;
+                });
+        when(assessmentTaskAuditLogMapper.insert(
+                any(AssessmentTaskAuditLogEntity.class)))
+                .thenReturn(1);
+        CreateAssessmentTaskRequest request =
+                new CreateAssessmentTaskRequest();
+        AssessmentTask result =
+                assessmentTaskService.create(request);
+
+        verify(assessmentTaskMapper)
+                .insert(any(AssessmentTaskEntity.class));
+        verify(eventPublisher).publishEvent(
+                new AssessmentTaskChangedEvent(1L)
+        );
+    }
+
+    @Test
+    void whenCreateRollbackShouldNotPublishEvent() {
+        AssessmentTaskEntity assessmentTaskEntity = new AssessmentTaskEntity();
+        assessmentTaskEntity.setId(1L);
+        assessmentTaskEntity.setStatus(TaskStatus.PROCESSING);
+        assessmentTaskEntity.setVersion(0);
+        when(assessmentTaskMapper.insert(
+                any(AssessmentTaskEntity.class)))
+                .thenReturn(1);
+
+        when(assessmentTaskAuditLogMapper.insert(
+                any(AssessmentTaskAuditLogEntity.class)))
+                .thenReturn(0);
+        CreateAssessmentTaskRequest request =
+                new CreateAssessmentTaskRequest();
+
+        BusinessException businessException = assertThrows(BusinessException.class,
+                () -> assessmentTaskService.create(request));
+        verify(eventPublisher, never()).publishEvent(any(AssessmentTaskChangedEvent.class));
+
+    }
+
+    @Test
+    void doubleCheckTest() {
+        AssessmentTask task = new AssessmentTask();
+
+        when(assessmentTaskCache.get(1L))
+                .thenReturn(
+                        AssessmentTaskCacheResult.miss(),
+                        AssessmentTaskCacheResult.hit(task)
+                );
+
+        when(redisLock.tryLock(
+                eq("sanitation:lock:assessment-task:1"),
+                any(Duration.class)
+        )).thenReturn("token-1");
+
+        AssessmentTask result =
+                assessmentTaskService.findById(1L);
+
+        assertSame(task, result);
+        verifyNoInteractions(assessmentTaskMapper);
+        verify(redisLock).unlock(
+                "sanitation:lock:assessment-task:1",
+                "token-1"
+        );
+    }
+
+    @Test
+    void redisLockCompetitiveFailed() {
+        when(assessmentTaskCache.get(1L))
+                .thenReturn(AssessmentTaskCacheResult.miss());
+
+        when(redisLock.tryLock(
+                eq("sanitation:lock:assessment-task:1"),
+                any(Duration.class)
+        )).thenReturn(null);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> assessmentTaskService.findById(1L)
+        );
+
+        assertEquals(
+                "缓存正在重建，请稍后重试",
+                exception.getMessage()
+        );
+
+        verifyNoInteractions(assessmentTaskMapper);
+        verify(redisLock, never()).unlock(
+                anyString(),
+                anyString()
+        );
     }
 }
 

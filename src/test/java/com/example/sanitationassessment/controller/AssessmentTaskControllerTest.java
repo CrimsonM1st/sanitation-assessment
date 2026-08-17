@@ -2,6 +2,7 @@ package com.example.sanitationassessment.controller;
 
 import com.example.sanitationassessment.cache.AssessmentTaskCache;
 import com.example.sanitationassessment.cache.AssessmentTaskCacheResult;
+import com.example.sanitationassessment.lock.RedisLock;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,7 +14,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import static org.mockito.ArgumentMatchers.anyLong;
+import java.time.Duration;
+
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -26,11 +29,17 @@ class AssessmentTaskControllerTest {
     private MockMvc mockMvc;
     @MockitoBean
     private AssessmentTaskCache assessmentTaskCache;
+    @MockitoBean
+    private RedisLock redisLock;
 
     @BeforeEach
     void setUpCacheMiss() {
         when(assessmentTaskCache.get(anyLong()))
                 .thenReturn(AssessmentTaskCacheResult.miss());
+        when(redisLock.tryLock(
+                anyString(),
+                any(Duration.class)
+        )).thenReturn("test-token");
     }
 
     @Test

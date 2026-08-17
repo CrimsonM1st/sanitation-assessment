@@ -19,8 +19,8 @@ class AssessmentTaskCacheEvictListenerTest {
 
     @Test
     void handleShouldEvictTaskCache() {
-        AssessmentTaskUpdatedEvent event =
-                new AssessmentTaskUpdatedEvent(1L);
+        AssessmentTaskChangedEvent event =
+                new AssessmentTaskChangedEvent(1L);
 
         listener.handle(event);
 

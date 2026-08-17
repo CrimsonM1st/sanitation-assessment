@@ -14,7 +14,7 @@ public class AssessmentTaskCacheEvictListener {
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void handle(AssessmentTaskUpdatedEvent event) {
+    public void handle(AssessmentTaskChangedEvent event) {
         // 根据事件里的 taskId 删除缓存
         Long taskId = event.taskId();
         assessmentTaskCache.evict(taskId);

@@ -12,10 +12,11 @@ import com.example.sanitationassessment.dto.assessment.QueryAssessmentTaskReques
 import com.example.sanitationassessment.dto.assessment.UpdateAssessmentTaskStatusRequest;
 import com.example.sanitationassessment.entity.AssessmentTaskAuditLogEntity;
 import com.example.sanitationassessment.entity.AssessmentTaskEntity;
-import com.example.sanitationassessment.event.AssessmentTaskUpdatedEvent;
+import com.example.sanitationassessment.event.AssessmentTaskChangedEvent;
 import com.example.sanitationassessment.exception.BusinessException;
 import com.example.sanitationassessment.exception.ConcurrentUpdateException;
 import com.example.sanitationassessment.exception.TaskNotFoundException;
+import com.example.sanitationassessment.lock.RedisLock;
 import com.example.sanitationassessment.mapper.AssessmentTaskAuditLogMapper;
 import com.example.sanitationassessment.mapper.AssessmentTaskMapper;
 import com.example.sanitationassessment.vo.PageResult;
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -33,12 +35,20 @@ public class AssessmentTaskService {
     private final AssessmentTaskAuditLogMapper assessmentTaskAuditLogMapper;
     private final AssessmentTaskCache assessmentTaskCache;
     private final ApplicationEventPublisher eventPublisher;
+    private static final String CACHE_REBUILD_LOCK_PREFIX =
+            "sanitation:lock:assessment-task:";
 
-    public AssessmentTaskService(AssessmentTaskMapper assessmentTaskMapper, AssessmentTaskAuditLogMapper assessmentTaskAuditLogMapper, AssessmentTaskCache assessmentTaskCache, ApplicationEventPublisher eventPublisher) {
+    private static final Duration CACHE_REBUILD_LOCK_TTL =
+            Duration.ofSeconds(10);
+
+    private final RedisLock redisLock;
+
+    public AssessmentTaskService(AssessmentTaskMapper assessmentTaskMapper, AssessmentTaskAuditLogMapper assessmentTaskAuditLogMapper, AssessmentTaskCache assessmentTaskCache, ApplicationEventPublisher eventPublisher, RedisLock redisLock) {
         this.assessmentTaskMapper = assessmentTaskMapper;
         this.assessmentTaskAuditLogMapper = assessmentTaskAuditLogMapper;
         this.assessmentTaskCache = assessmentTaskCache;
         this.eventPublisher = eventPublisher;
+        this.redisLock = redisLock;
     }
 
     @Transactional
@@ -67,6 +77,11 @@ public class AssessmentTaskService {
         if (affectedRows != 1) {
             throw new BusinessException("记录审计日志失败");
         }
+        eventPublisher.publishEvent(
+                new AssessmentTaskChangedEvent(
+                        assessmentTaskEntity.getId()
+                )
+        );
         return toDomain(assessmentTaskEntity);
     }
 
@@ -80,14 +95,39 @@ public class AssessmentTaskService {
                     "考评任务不存在，id=" + id
             );
         }
-        AssessmentTaskEntity assessmentTaskEntity = assessmentTaskMapper.selectById(id);
-        if (assessmentTaskEntity == null) {
-            assessmentTaskCache.putNull(id);
-            throw new TaskNotFoundException("考评任务不存在，id=" + id);
+        String lockKey = CACHE_REBUILD_LOCK_PREFIX + id;
+
+        String token = redisLock.tryLock(
+                lockKey,
+                CACHE_REBUILD_LOCK_TTL
+        );
+
+        if (token == null) {
+            throw new BusinessException(
+                    "缓存正在重建，请稍后重试"
+            );
         }
-        AssessmentTask domain = toDomain(assessmentTaskEntity);
-        assessmentTaskCache.put(domain);
-        return domain;
+
+        try {
+            // 获得锁后必须再次查询缓存
+            AssessmentTaskCacheResult secondResult =
+                    assessmentTaskCache.get(id);
+
+            if (secondResult.hit()
+                    && secondResult.task() != null) {
+                return secondResult.task();
+            }
+
+            if (secondResult.hit()) {
+                throw new TaskNotFoundException(
+                        "考评任务不存在，id=" + id
+                );
+            }
+
+            return loadFromDatabase(id);
+        } finally {
+            redisLock.unlock(lockKey, token);
+        }
     }
 
     public AssessmentTask toDomain(AssessmentTaskEntity assessmentTaskEntity) {
@@ -140,9 +180,25 @@ public class AssessmentTaskService {
             throw new ConcurrentUpdateException("任务已被其他请求修改，请刷新后重试");
         }
         eventPublisher.publishEvent(
-                new AssessmentTaskUpdatedEvent(id)
+                new AssessmentTaskChangedEvent(id)
         );
         return toDomain(assessmentTaskEntity);
 
+    }
+
+    private AssessmentTask loadFromDatabase(Long id) {
+        AssessmentTaskEntity entity =
+                assessmentTaskMapper.selectById(id);
+
+        if (entity == null) {
+            assessmentTaskCache.putNull(id);
+            throw new TaskNotFoundException(
+                    "考评任务不存在，id=" + id
+            );
+        }
+
+        AssessmentTask task = toDomain(entity);
+        assessmentTaskCache.put(task);
+        return task;
     }
 }
