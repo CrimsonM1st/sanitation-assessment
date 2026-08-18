@@ -10,6 +10,7 @@ import com.example.sanitationassessment.entity.AssessmentTaskAuditLogEntity;
 import com.example.sanitationassessment.entity.AssessmentTaskEntity;
 import com.example.sanitationassessment.event.AssessmentTaskChangedEvent;
 import com.example.sanitationassessment.exception.BusinessException;
+import com.example.sanitationassessment.exception.CacheRebuildBusyException;
 import com.example.sanitationassessment.exception.ConcurrentUpdateException;
 import com.example.sanitationassessment.exception.TaskNotFoundException;
 import com.example.sanitationassessment.lock.RedisLock;
@@ -265,8 +266,8 @@ class AssessmentTaskServiceTest {
                 any(Duration.class)
         )).thenReturn(null);
 
-        BusinessException exception = assertThrows(
-                BusinessException.class,
+        CacheRebuildBusyException exception = assertThrows(
+                CacheRebuildBusyException.class,
                 () -> assessmentTaskService.findById(1L)
         );
 
@@ -279,6 +280,73 @@ class AssessmentTaskServiceTest {
         verify(redisLock, never()).unlock(
                 anyString(),
                 anyString()
+        );
+    }
+
+    @Test
+    void findByIdShouldReturnCacheAfterWaitingWhenLockFails() {
+        AssessmentTask task = new AssessmentTask();
+
+        when(assessmentTaskCache.get(1L))
+                .thenReturn(
+                        AssessmentTaskCacheResult.miss(),
+                        AssessmentTaskCacheResult.hit(task)
+                );
+
+        when(redisLock.tryLock(
+                eq("sanitation:lock:assessment-task:1"),
+                any(Duration.class)
+        )).thenReturn(null);
+
+        AssessmentTask result =
+                assessmentTaskService.findById(1L);
+
+        assertSame(task, result);
+
+        verify(redisLock).tryLock(
+                eq("sanitation:lock:assessment-task:1"),
+                any(Duration.class)
+        );
+        verifyNoInteractions(assessmentTaskMapper);
+        verify(redisLock, never()).unlock(
+                anyString(),
+                anyString()
+        );
+    }
+
+    @Test
+    void findByIdShouldGetLockAndRebuildAfterFirstLockFails() {
+        AssessmentTaskEntity assessmentTaskEntity = new AssessmentTaskEntity();
+        assessmentTaskEntity.setId(1L);
+        assessmentTaskEntity.setStatus(TaskStatus.PROCESSING);
+        assessmentTaskEntity.setVersion(0);
+        when(assessmentTaskCache.get(1L))
+                .thenReturn(AssessmentTaskCacheResult.miss());
+
+        when(redisLock.tryLock(
+                eq("sanitation:lock:assessment-task:1"),
+                any(Duration.class)
+        )).thenReturn(null, "token-1");
+
+        when(assessmentTaskMapper.selectById(1L))
+                .thenReturn(assessmentTaskEntity);
+
+        AssessmentTask result =
+                assessmentTaskService.findById(1L);
+
+        assertEquals(1L, result.getId());
+
+        verify(redisLock, times(2)).tryLock(
+                eq("sanitation:lock:assessment-task:1"),
+                any(Duration.class)
+        );
+
+        verify(assessmentTaskMapper).selectById(1L);
+        verify(assessmentTaskCache).put(result);
+
+        verify(redisLock).unlock(
+                "sanitation:lock:assessment-task:1",
+                "token-1"
         );
     }
 }

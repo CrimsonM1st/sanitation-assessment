@@ -36,4 +36,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result<Void>> handleConcurrentUpdateException(ConcurrentUpdateException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Result.error(409, exception.getMessage()));
     }
+
+    @ExceptionHandler(CacheRebuildBusyException.class)
+    public ResponseEntity<Result<Void>> handleCacheRebuildBusyException(CacheRebuildBusyException exception) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Result.error(503, exception.getMessage()));
+    }
 }

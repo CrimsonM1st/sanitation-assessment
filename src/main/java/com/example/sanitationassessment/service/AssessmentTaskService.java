@@ -14,6 +14,7 @@ import com.example.sanitationassessment.entity.AssessmentTaskAuditLogEntity;
 import com.example.sanitationassessment.entity.AssessmentTaskEntity;
 import com.example.sanitationassessment.event.AssessmentTaskChangedEvent;
 import com.example.sanitationassessment.exception.BusinessException;
+import com.example.sanitationassessment.exception.CacheRebuildBusyException;
 import com.example.sanitationassessment.exception.ConcurrentUpdateException;
 import com.example.sanitationassessment.exception.TaskNotFoundException;
 import com.example.sanitationassessment.lock.RedisLock;
@@ -40,7 +41,10 @@ public class AssessmentTaskService {
 
     private static final Duration CACHE_REBUILD_LOCK_TTL =
             Duration.ofSeconds(10);
+    private static final int CACHE_REBUILD_MAX_ATTEMPTS = 5;
 
+    private static final Duration CACHE_REBUILD_RETRY_INTERVAL =
+            Duration.ofMillis(50);
     private final RedisLock redisLock;
 
     public AssessmentTaskService(AssessmentTaskMapper assessmentTaskMapper, AssessmentTaskAuditLogMapper assessmentTaskAuditLogMapper, AssessmentTaskCache assessmentTaskCache, ApplicationEventPublisher eventPublisher, RedisLock redisLock) {
@@ -86,47 +90,67 @@ public class AssessmentTaskService {
     }
 
     public AssessmentTask findById(Long id) {
-        AssessmentTaskCacheResult assessmentTaskCacheResult = assessmentTaskCache.get(id);
-        if (assessmentTaskCacheResult.hit() && assessmentTaskCacheResult.task() != null) {
-            return assessmentTaskCacheResult.task();
-        }
-        if (assessmentTaskCacheResult.hit()) {
-            throw new TaskNotFoundException(
-                    "考评任务不存在，id=" + id
-            );
-        }
         String lockKey = CACHE_REBUILD_LOCK_PREFIX + id;
-
-        String token = redisLock.tryLock(
-                lockKey,
-                CACHE_REBUILD_LOCK_TTL
-        );
-
-        if (token == null) {
-            throw new BusinessException(
-                    "缓存正在重建，请稍后重试"
-            );
-        }
-
-        try {
-            // 获得锁后必须再次查询缓存
-            AssessmentTaskCacheResult secondResult =
-                    assessmentTaskCache.get(id);
-
-            if (secondResult.hit()
-                    && secondResult.task() != null) {
-                return secondResult.task();
+        for (int attempt = 0; attempt < CACHE_REBUILD_MAX_ATTEMPTS; attempt++) {
+            AssessmentTaskCacheResult assessmentTaskCacheResult = assessmentTaskCache.get(id);
+            if (assessmentTaskCacheResult.hit() && assessmentTaskCacheResult.task() != null) {
+                return assessmentTaskCacheResult.task();
             }
-
-            if (secondResult.hit()) {
+            if (assessmentTaskCacheResult.hit()) {
                 throw new TaskNotFoundException(
                         "考评任务不存在，id=" + id
                 );
             }
 
-            return loadFromDatabase(id);
-        } finally {
-            redisLock.unlock(lockKey, token);
+            String token = redisLock.tryLock(
+                    lockKey,
+                    CACHE_REBUILD_LOCK_TTL
+            );
+            if (token != null) {
+                try {
+                    // 获得锁后必须再次查询缓存
+                    AssessmentTaskCacheResult secondResult =
+                            assessmentTaskCache.get(id);
+
+                    if (secondResult.hit()
+                            && secondResult.task() != null) {
+                        return secondResult.task();
+                    }
+
+                    if (secondResult.hit()) {
+                        throw new TaskNotFoundException(
+                                "考评任务不存在，id=" + id
+                        );
+                    }
+
+                    return loadFromDatabase(id);
+                } finally {
+                    redisLock.unlock(lockKey, token);
+                }
+            }
+            if (attempt < CACHE_REBUILD_MAX_ATTEMPTS - 1) {
+                waitBeforeRetry();
+            }
+        }
+
+        throw new CacheRebuildBusyException(
+                "缓存正在重建，请稍后重试"
+        );
+
+
+    }
+
+    private void waitBeforeRetry() {
+        try {
+            Thread.sleep(
+                    CACHE_REBUILD_RETRY_INTERVAL.toMillis()
+            );
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+
+            throw new CacheRebuildBusyException(
+                    "缓存正在重建，请稍后重试"
+            );
         }
     }
 

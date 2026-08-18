@@ -428,4 +428,22 @@ class AssessmentTaskControllerTest {
         Number id = JsonPath.read(responseBody, "$.data.id");
         return id.longValue();
     }
+
+    @Test
+    void cacheRebuildBusyShouldReturnServiceUnavailable()
+            throws Exception {
+        when(assessmentTaskCache.get(1L))
+                .thenReturn(AssessmentTaskCacheResult.miss());
+
+        when(redisLock.tryLock(
+                anyString(),
+                any(Duration.class)
+        )).thenReturn(null);
+
+        mockMvc.perform(get("/assessment-tasks/1"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value(503))
+                .andExpect(jsonPath("$.msg")
+                        .value("缓存正在重建，请稍后重试"));
+    }
 }
