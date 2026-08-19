@@ -1,0 +1,15 @@
+.git
+.github
+.idea
+*.iml
+*.ipr
+*.iws
+.vscode
+.mvn
+src
+sql
+docs
+README.md
+HELP.md
+pom.xml
+target/*.jar.original
