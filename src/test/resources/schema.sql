@@ -27,3 +27,22 @@ CREATE TABLE `assessment_task_audit_log`
     detail     VARCHAR(50)  NOT NULL,
     created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+DROP TABLE IF EXISTS sys_user;
+
+CREATE TABLE sys_user
+(
+    id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+    username      VARCHAR(50)  NOT NULL,
+    password_hash VARCHAR(100) NOT NULL,
+    role          VARCHAR(20)  NOT NULL,
+    enabled       BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uk_sys_user_username
+        UNIQUE (username),
+
+    CONSTRAINT chk_sys_user_role
+        CHECK (role IN ('ADMIN', 'INSPECTOR'))
+);

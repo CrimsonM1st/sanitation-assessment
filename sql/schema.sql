@@ -41,3 +41,24 @@ CREATE TABLE `assessment_task_audit_log`
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
     COMMENT = '审计日志表';
+DROP TABLE IF EXISTS system_user;
+CREATE TABLE `sys_user`
+(
+    id            BIGINT UNSIGNED AUTO_INCREMENT COMMENT 'id',
+    username      VARCHAR(50)  NOT NULL COMMENT '用户名',
+    password_hash VARCHAR(100) NOT NULL COMMENT '密码哈希值',
+    role          VARCHAR(20)  NOT NULL COMMENT '角色',
+    enabled       TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否启用',
+    created_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+    `updated_at`  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_sys_user_username`
+        (`username`),
+    CONSTRAINT `chk_sys_user_role`
+        CHECK (`role` IN (
+                          'ADMIN',
+                          'INSPECTOR')
+            )
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+    COMMENT = '系统用户表';
