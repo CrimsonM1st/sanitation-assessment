@@ -1,7 +1,9 @@
 package com.example.sanitationassessment.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.example.sanitationassessment.auth.JwtTokenProvider;
 import com.example.sanitationassessment.dto.auth.LoginRequest;
+import com.example.sanitationassessment.dto.auth.LoginResponse;
 import com.example.sanitationassessment.dto.user.SystemUserResponse;
 import com.example.sanitationassessment.entity.SystemUserEntity;
 import com.example.sanitationassessment.exception.BusinessException;
@@ -13,13 +15,15 @@ import org.springframework.stereotype.Service;
 public class AuthenticationService {
     private final SystemUserMapper systemUserMapper;
     private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
 
-    public AuthenticationService(SystemUserMapper systemUserMapper, PasswordEncoder passwordEncoder) {
+    public AuthenticationService(SystemUserMapper systemUserMapper, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider) {
         this.systemUserMapper = systemUserMapper;
         this.passwordEncoder = passwordEncoder;
+        this.jwtTokenProvider = jwtTokenProvider;
     }
 
-    public SystemUserResponse authenticate(LoginRequest request) {
+    public LoginResponse authenticate(LoginRequest request) {
         String username = request.getUsername().trim();
         String password = request.getPassword();
 
@@ -37,12 +41,19 @@ public class AuthenticationService {
         if (!passwordEncoder.matches(password, systemUserEntity.getPasswordHash())) {
             throw new BusinessException("用户名或密码错误");
         }
-        return new SystemUserResponse(
+        SystemUserResponse user = new SystemUserResponse(
                 systemUserEntity.getId(),
                 systemUserEntity.getUsername(),
                 systemUserEntity.getRole(),
                 systemUserEntity.getEnabled(),
                 systemUserEntity.getCreatedAt()
+        );
+        String accessToken = jwtTokenProvider.generateToken(user);
+
+        return new LoginResponse(
+                accessToken,
+                "Bearer",
+                user
         );
     }
 }

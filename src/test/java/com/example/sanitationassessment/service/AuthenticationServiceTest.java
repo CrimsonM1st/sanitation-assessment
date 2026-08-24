@@ -1,7 +1,9 @@
 package com.example.sanitationassessment.service;
 
+import com.example.sanitationassessment.auth.JwtTokenProvider;
 import com.example.sanitationassessment.domain.UserRole;
 import com.example.sanitationassessment.dto.auth.LoginRequest;
+import com.example.sanitationassessment.dto.auth.LoginResponse;
 import com.example.sanitationassessment.dto.user.SystemUserResponse;
 import com.example.sanitationassessment.entity.SystemUserEntity;
 import com.example.sanitationassessment.exception.BusinessException;
@@ -31,6 +33,9 @@ class AuthenticationServiceTest {
     @InjectMocks
     private AuthenticationService authenticationService;
 
+    @Mock
+    private JwtTokenProvider jwtTokenProvider;
+
     @Test
     void authenticationSuccess() {
         SystemUserEntity entity = new SystemUserEntity();
@@ -40,22 +45,25 @@ class AuthenticationServiceTest {
         entity.setRole(UserRole.ADMIN);
         entity.setEnabled(true);
         entity.setCreatedAt(LocalDateTime.now());
-
+        when(jwtTokenProvider.generateToken(any(SystemUserResponse.class)))
+                .thenReturn("test-access-token");
         when(systemUserMapper.selectOne(any())).thenReturn(entity);
         when(passwordEncoder.matches(
                 "password123", "encoded-password"))
                 .thenReturn(true);
 
-        SystemUserResponse response = authenticationService.authenticate(
-                new LoginRequest(" admin ", "password123")
-        );
-
-        assertEquals(1L, response.getId());
-        assertEquals("admin", response.getUsername());
-        assertEquals(UserRole.ADMIN, response.getRole());
-        assertTrue(response.getEnabled());
+        LoginResponse response =
+                authenticationService.authenticate(new LoginRequest(" admin ", "password123"));
+        assertEquals("test-access-token", response.getAccessToken());
+        assertEquals("Bearer", response.getTokenType());
+        assertEquals(1L, response.getUser().getId());
+        assertEquals("admin", response.getUser().getUsername());
+        assertEquals(UserRole.ADMIN, response.getUser().getRole());
+        assertTrue(response.getUser().getEnabled());
         verify(systemUserMapper).selectOne(any());
         verify(passwordEncoder, times(1)).matches(anyString(), anyString());
+        verify(jwtTokenProvider)
+                .generateToken(any(SystemUserResponse.class));
     }
 
     @Test
@@ -71,6 +79,7 @@ class AuthenticationServiceTest {
 
         assertEquals("用户名或密码错误", exception.getMessage());
         verifyNoInteractions(passwordEncoder);
+        verifyNoInteractions(jwtTokenProvider);
     }
 
     @Test
@@ -88,6 +97,7 @@ class AuthenticationServiceTest {
         );
         assertEquals("用户名或密码错误", exception.getMessage());
         verify(passwordEncoder, times(1)).matches(anyString(), anyString());
+        verifyNoInteractions(jwtTokenProvider);
     }
 
     @Test
@@ -103,7 +113,7 @@ class AuthenticationServiceTest {
         assertEquals("用户名或密码错误", exception.getMessage());
 
         verifyNoInteractions(passwordEncoder);
-
+        verifyNoInteractions(jwtTokenProvider);
     }
 
     private SystemUserEntity createUser(boolean enabled) {
