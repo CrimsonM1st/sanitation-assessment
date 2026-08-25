@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -24,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@WithMockUser(username = "inspector", roles = "INSPECTOR")
 class AssessmentTaskControllerTest {
     @Autowired
     private MockMvc mockMvc;
@@ -31,6 +33,7 @@ class AssessmentTaskControllerTest {
     private AssessmentTaskCache assessmentTaskCache;
     @MockitoBean
     private RedisLock redisLock;
+
 
     @BeforeEach
     void setUpCacheMiss() {

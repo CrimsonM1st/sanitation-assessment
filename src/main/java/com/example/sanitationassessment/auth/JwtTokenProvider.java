@@ -1,7 +1,9 @@
 package com.example.sanitationassessment.auth;
 
 import com.example.sanitationassessment.config.JwtProperties;
+import com.example.sanitationassessment.domain.UserRole;
 import com.example.sanitationassessment.dto.user.SystemUserResponse;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -36,5 +38,19 @@ public class JwtTokenProvider {
                 .expiration(Date.from(expiresAt))
                 .signWith(signingKey)
                 .compact();
+    }
+
+    public AuthenticatedUser parseToken(String token) {
+        Claims claims = Jwts.parser()
+                .verifyWith(signingKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+        Long userId = ((Number) claims.get("userId")).longValue();
+
+        String username = claims.getSubject();
+
+        UserRole role = UserRole.valueOf(claims.get("role", String.class));
+        return new AuthenticatedUser(userId, username, role);
     }
 }

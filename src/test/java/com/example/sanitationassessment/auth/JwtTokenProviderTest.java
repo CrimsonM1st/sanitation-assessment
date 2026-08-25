@@ -81,16 +81,31 @@ public class JwtTokenProviderTest {
 
         String tamperedToken = String.join(".", parts);
 
+        assertThrows(
+                SignatureException.class,
+                () -> jwtTokenProvider.parseToken(tamperedToken)
+        );
+
+    }
+
+    @Test
+    void validTokenShouldParseToAuthenticatedUser() {
+        SystemUserResponse response = new SystemUserResponse(
+                1L,
+                "admin",
+                UserRole.ADMIN,
+                true,
+                LocalDateTime.now());
+        String token = jwtTokenProvider.generateToken(response);
+
         SecretKey key = Keys.hmacShaKeyFor(
                 Decoders.BASE64.decode(SECRET)
         );
 
-        assertThrows(
-                SignatureException.class,
-                () -> Jwts.parser()
-                        .verifyWith(key)
-                        .build()
-                        .parseSignedClaims(tamperedToken)
-        );
+        AuthenticatedUser authenticatedUser = jwtTokenProvider.parseToken(token);
+
+        assertEquals(1L, authenticatedUser.userId());
+        assertEquals("admin", authenticatedUser.username());
+        assertEquals(UserRole.ADMIN, authenticatedUser.role());
     }
 }

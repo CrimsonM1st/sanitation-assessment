@@ -1,24 +1,61 @@
 package com.example.sanitationassessment.config;
 
+import com.example.sanitationassessment.auth.JwtAuthenticationFilter;
+import com.example.sanitationassessment.auth.JwtTokenProvider;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableConfigurationProperties(JwtProperties.class)
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtTokenProvider jwtTokenProvider) throws Exception {
+        JwtAuthenticationFilter jwtAuthenticationFilter =
+                new JwtAuthenticationFilter(jwtTokenProvider);
         return http
                 .csrf(AbstractHttpConfigurer::disable)
-                .authorizeHttpRequests(
-                        authorize -> authorize.anyRequest().permitAll()).build();
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(
+                                SessionCreationPolicy.STATELESS
+                        )
+                )
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/auth/login", "/hello")
+                        .permitAll()
+                        .requestMatchers(HttpMethod.POST, "/users")
+                        .hasRole("ADMIN")
+                        .requestMatchers(
+                                "/assessment-tasks",
+                                "/assessment-tasks/**"
+                        )
+                        .authenticated()
+                        .anyRequest()
+                        .authenticated()
+                )
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint(
+                                (request, response, authException) ->
+                                        response.sendError(
+                                                HttpServletResponse.SC_UNAUTHORIZED
+                                        )
+                        )
+                )
+                .addFilterBefore(
+                        jwtAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                )
+                .build();
     }
 
     @Bean

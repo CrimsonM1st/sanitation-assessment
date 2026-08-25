@@ -1,0 +1,179 @@
+package com.example.sanitationassessment.auth;
+
+import com.example.sanitationassessment.domain.UserRole;
+import com.example.sanitationassessment.dto.assessment.QueryAssessmentTaskRequest;
+import com.example.sanitationassessment.dto.user.CreateSystemUserRequest;
+import com.example.sanitationassessment.dto.user.SystemUserResponse;
+import com.example.sanitationassessment.service.AssessmentTaskService;
+import com.example.sanitationassessment.service.SystemUserService;
+import com.example.sanitationassessment.vo.PageResult;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+class JwtSecurityIntegrationTest {
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
+
+    @MockitoBean
+    private AssessmentTaskService assessmentTaskService;
+
+    @MockitoBean
+    private SystemUserService systemUserService;
+
+    @Test
+    void protectedEndpointWithoutTokenShouldReturnUnauthorized()
+            throws Exception {
+
+        mockMvc.perform(get("/assessment-tasks"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(assessmentTaskService);
+    }
+
+    @Test
+    void protectedEndpointWithValidTokenShouldReturnSuccess() throws Exception {
+        when(assessmentTaskService.query(
+                any(QueryAssessmentTaskRequest.class)))
+                .thenReturn(new PageResult<>(
+                        List.of(), 0, 1, 10, 0
+                ));
+
+        SystemUserResponse user = new SystemUserResponse(
+                1L,
+                "inspector",
+                UserRole.INSPECTOR,
+                true,
+                LocalDateTime.now()
+        );
+
+        String token = jwtTokenProvider.generateToken(user);
+
+        mockMvc.perform(get("/assessment-tasks")
+                        .header(
+                                HttpHeaders.AUTHORIZATION,
+                                "Bearer " + token
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        verify(assessmentTaskService)
+                .query(any(QueryAssessmentTaskRequest.class));
+    }
+
+    @Test
+    void tamperedTokenShouldReturnUnauthorized() throws Exception {
+        SystemUserResponse user = new SystemUserResponse(
+                1L,
+                "inspector",
+                UserRole.INSPECTOR,
+                true,
+                LocalDateTime.now()
+        );
+
+        String token = jwtTokenProvider.generateToken(user);
+
+        String[] parts = token.split("\\.");
+        String signature = parts[2];
+
+        parts[2] = (signature.startsWith("A") ? "B" : "A")
+                + signature.substring(1);
+
+        String tamperedToken = String.join(".", parts);
+
+        mockMvc.perform(get("/assessment-tasks")
+                        .header(
+                                HttpHeaders.AUTHORIZATION,
+                                "Bearer " + tamperedToken
+                        ))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(assessmentTaskService);
+    }
+
+    @Test
+    void inspectorCreateUserShouldReturnForbidden() throws Exception {
+        SystemUserResponse user = new SystemUserResponse(
+                1L,
+                "inspector",
+                UserRole.INSPECTOR,
+                true,
+                LocalDateTime.now()
+        );
+        String token = jwtTokenProvider.generateToken(user);
+
+        mockMvc.perform(post("/users")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "new-user",
+                                  "password": "password123",
+                                  "role": "INSPECTOR"
+                                }
+                                """))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(systemUserService);
+    }
+
+    @Test
+    void adminCreateUserShouldReturnOk() throws Exception {
+        SystemUserResponse user = new SystemUserResponse(
+                1L,
+                "admin",
+                UserRole.ADMIN,
+                true,
+                LocalDateTime.now()
+        );
+        String token = jwtTokenProvider.generateToken(user);
+
+        when(systemUserService.create(
+                any(CreateSystemUserRequest.class)))
+                .thenReturn(new SystemUserResponse(
+                        2L,
+                        "new-user",
+                        UserRole.INSPECTOR,
+                        true,
+                        LocalDateTime.now()
+                ));
+
+        mockMvc.perform(post("/users")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "new-user",
+                                  "password": "password123",
+                                  "role": "INSPECTOR"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.username").value("new-user"));
+
+
+        verify(systemUserService, times(1))
+                .create(any(CreateSystemUserRequest.class));
+
+    }
+}
