@@ -1,5 +1,6 @@
 package com.example.sanitationassessment.auth;
 
+import com.example.sanitationassessment.config.JwtProperties;
 import com.example.sanitationassessment.domain.UserRole;
 import com.example.sanitationassessment.dto.assessment.QueryAssessmentTaskRequest;
 import com.example.sanitationassessment.dto.user.CreateSystemUserRequest;
@@ -16,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -23,8 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -41,13 +42,20 @@ class JwtSecurityIntegrationTest {
     @MockitoBean
     private SystemUserService systemUserService;
 
+    @Autowired
+    private JwtProperties jwtProperties;
+
     @Test
     void protectedEndpointWithoutTokenShouldReturnUnauthorized()
             throws Exception {
 
         mockMvc.perform(get("/assessment-tasks"))
-                .andExpect(status().isUnauthorized());
-
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(
+                        MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(401))
+                .andExpect(jsonPath("$.msg")
+                        .value("未登录或Token无效"));
         verifyNoInteractions(assessmentTaskService);
     }
 
@@ -106,7 +114,12 @@ class JwtSecurityIntegrationTest {
                                 HttpHeaders.AUTHORIZATION,
                                 "Bearer " + tamperedToken
                         ))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(
+                        MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(401))
+                .andExpect(jsonPath("$.msg")
+                        .value("未登录或Token无效"));
 
         verifyNoInteractions(assessmentTaskService);
     }
@@ -132,7 +145,11 @@ class JwtSecurityIntegrationTest {
                                   "role": "INSPECTOR"
                                 }
                                 """))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(
+                        MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(403))
+                .andExpect(jsonPath("$.msg").value("权限不足"));
 
         verifyNoInteractions(systemUserService);
     }
@@ -174,6 +191,52 @@ class JwtSecurityIntegrationTest {
 
         verify(systemUserService, times(1))
                 .create(any(CreateSystemUserRequest.class));
+
+    }
+
+    @Test
+    void expiredTokenShouldReturnUnauthorized() throws Exception {
+        JwtTokenProvider expiredTokenProvider =
+                new JwtTokenProvider(
+                        new JwtProperties(
+                                jwtProperties.secret(),
+                                Duration.ofSeconds(-1)
+                        )
+                );
+        SystemUserResponse user = new SystemUserResponse(
+                1L,
+                "admin",
+                UserRole.ADMIN,
+                true,
+                LocalDateTime.now()
+        );
+        String token = expiredTokenProvider.generateToken(user);
+        mockMvc.perform(get("/assessment-tasks")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401))
+                .andExpect(jsonPath("$.msg").value("未登录或Token无效"));
+
+        verifyNoInteractions(assessmentTaskService);
+    }
+
+    @Test
+    void integratedTest() throws Exception {
+        SystemUserResponse user = new SystemUserResponse(
+                1L,
+                "inspector",
+                UserRole.INSPECTOR,
+                true,
+                LocalDateTime.now()
+        );
+        String token = jwtTokenProvider.generateToken(user);
+        mockMvc.perform(get("/auth/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.userId").value(1))
+                .andExpect(jsonPath("$.data.username").value("inspector"))
+                .andExpect(jsonPath("$.data.role").value("INSPECTOR"));
 
     }
 }
