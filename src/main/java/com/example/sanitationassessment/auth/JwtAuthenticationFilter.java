@@ -18,9 +18,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
 
+    private final JwtTokenBlacklist jwtTokenBlacklist;
+
     public JwtAuthenticationFilter(
-            JwtTokenProvider jwtTokenProvider) {
+            JwtTokenProvider jwtTokenProvider, JwtTokenBlacklist jwtTokenBlacklist) {
         this.jwtTokenProvider = jwtTokenProvider;
+        this.jwtTokenBlacklist = jwtTokenBlacklist;
     }
 
     @Override
@@ -44,6 +47,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             AuthenticatedUser user =
                     jwtTokenProvider.parseToken(token);
+            
+            if (jwtTokenBlacklist.isRevoked(user.tokenId())) {
+                SecurityContextHolder.clearContext();
+                filterChain.doFilter(request, response);
+                return;
+            }
 
             SimpleGrantedAuthority authority =
                     new SimpleGrantedAuthority(

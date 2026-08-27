@@ -30,4 +30,15 @@ public class AuthenticationController {
 
         return Result.success(authenticatedUser);
     }
+
+    @PostMapping("/logout")
+    public Result<Void> logout(@AuthenticationPrincipal AuthenticatedUser authenticatedUser) {
+
+        authenticationService.logout(authenticatedUser);
+
+        return Result.success(
+                "退出成功",
+                null
+        );
+    }
 }

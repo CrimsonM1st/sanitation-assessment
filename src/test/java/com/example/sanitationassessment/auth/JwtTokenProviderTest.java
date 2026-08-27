@@ -107,5 +107,7 @@ public class JwtTokenProviderTest {
         assertEquals(1L, authenticatedUser.userId());
         assertEquals("admin", authenticatedUser.username());
         assertEquals(UserRole.ADMIN, authenticatedUser.role());
+        assertNotNull(authenticatedUser.tokenId());
+        assertNotNull(authenticatedUser.expiresAt());
     }
 }

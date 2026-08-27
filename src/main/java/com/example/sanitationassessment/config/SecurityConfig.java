@@ -1,9 +1,6 @@
 package com.example.sanitationassessment.config;
 
-import com.example.sanitationassessment.auth.JwtAuthenticationFilter;
-import com.example.sanitationassessment.auth.JwtTokenProvider;
-import com.example.sanitationassessment.auth.RestAccessDeniedHandler;
-import com.example.sanitationassessment.auth.RestAuthenticationEntryPoint;
+import com.example.sanitationassessment.auth.*;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,9 +21,9 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    JwtTokenProvider jwtTokenProvider,
                                                    RestAuthenticationEntryPoint authenticationEntryPoint,
-                                                   RestAccessDeniedHandler accessDeniedHandler) throws Exception {
+                                                   RestAccessDeniedHandler accessDeniedHandler, JwtTokenBlacklist jwtTokenBlacklist) throws Exception {
         JwtAuthenticationFilter jwtAuthenticationFilter =
-                new JwtAuthenticationFilter(jwtTokenProvider);
+                new JwtAuthenticationFilter(jwtTokenProvider, jwtTokenBlacklist);
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->

@@ -1,6 +1,8 @@
 package com.example.sanitationassessment.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.example.sanitationassessment.auth.AuthenticatedUser;
+import com.example.sanitationassessment.auth.JwtTokenBlacklist;
 import com.example.sanitationassessment.auth.JwtTokenProvider;
 import com.example.sanitationassessment.dto.auth.LoginRequest;
 import com.example.sanitationassessment.dto.auth.LoginResponse;
@@ -16,11 +18,13 @@ public class AuthenticationService {
     private final SystemUserMapper systemUserMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final JwtTokenBlacklist jwtTokenBlacklist;
 
-    public AuthenticationService(SystemUserMapper systemUserMapper, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider) {
+    public AuthenticationService(SystemUserMapper systemUserMapper, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider, JwtTokenBlacklist jwtTokenBlacklist) {
         this.systemUserMapper = systemUserMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.jwtTokenBlacklist = jwtTokenBlacklist;
     }
 
     public LoginResponse authenticate(LoginRequest request) {
@@ -54,6 +58,13 @@ public class AuthenticationService {
                 accessToken,
                 "Bearer",
                 user
+        );
+    }
+
+    public void logout(AuthenticatedUser user) {
+        jwtTokenBlacklist.revoke(
+                user.tokenId(),
+                user.expiresAt()
         );
     }
 }

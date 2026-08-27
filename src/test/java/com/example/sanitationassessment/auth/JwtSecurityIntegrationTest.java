@@ -18,6 +18,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -41,6 +42,9 @@ class JwtSecurityIntegrationTest {
 
     @MockitoBean
     private SystemUserService systemUserService;
+
+    @MockitoBean
+    private JwtTokenBlacklist jwtTokenBlacklist;
 
     @Autowired
     private JwtProperties jwtProperties;
@@ -221,7 +225,7 @@ class JwtSecurityIntegrationTest {
     }
 
     @Test
-    void integratedTest() throws Exception {
+    void currentUserEndpointShouldReturnUserWithoutInternalTokenFields() throws Exception {
         SystemUserResponse user = new SystemUserResponse(
                 1L,
                 "inspector",
@@ -236,7 +240,74 @@ class JwtSecurityIntegrationTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.userId").value(1))
                 .andExpect(jsonPath("$.data.username").value("inspector"))
-                .andExpect(jsonPath("$.data.role").value("INSPECTOR"));
+                .andExpect(jsonPath("$.data.role").value("INSPECTOR"))
+                .andExpect(jsonPath("$.data.tokenId").doesNotExist())
+                .andExpect(jsonPath("$.data.expiresAt").doesNotExist());
 
+    }
+
+    @Test
+    void revokedTokenShouldReturnUnauthorized() throws Exception {
+        SystemUserResponse user = new SystemUserResponse(
+                1L,
+                "admin",
+                UserRole.ADMIN,
+                true,
+                LocalDateTime.now()
+        );
+        String token = jwtTokenProvider.generateToken(user);
+        when(jwtTokenBlacklist.isRevoked(anyString())).thenReturn(true);
+
+        mockMvc.perform(get("/assessment-tasks")
+                        .header(
+                                HttpHeaders.AUTHORIZATION,
+                                "Bearer " + token
+                        ))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
+        verifyNoInteractions(assessmentTaskService);
+    }
+
+    @Test
+    void logoutWithoutTokenShouldReturnUnauthorized()
+            throws Exception {
+
+        mockMvc.perform(post("/auth/logout"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
+
+        verify(jwtTokenBlacklist, never())
+                .revoke(anyString(), any(Instant.class));
+    }
+
+    @Test
+    void logoutWithValidTokenShouldRevokeCurrentJti() throws Exception {
+        SystemUserResponse user = new SystemUserResponse(
+                1L,
+                "admin",
+                UserRole.ADMIN,
+                true,
+                LocalDateTime.now()
+        );
+
+        String token = jwtTokenProvider.generateToken(user);
+
+        AuthenticatedUser authenticatedUser =
+                jwtTokenProvider.parseToken(token);
+
+        mockMvc.perform(post("/auth/logout")
+                        .header(
+                                HttpHeaders.AUTHORIZATION,
+                                "Bearer " + token
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.msg").value("退出成功"));
+
+        verify(jwtTokenBlacklist)
+                .revoke(
+                        authenticatedUser.tokenId(),
+                        authenticatedUser.expiresAt()
+                );
     }
 }

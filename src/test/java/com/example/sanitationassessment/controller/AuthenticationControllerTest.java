@@ -105,4 +105,6 @@ public class AuthenticationControllerTest {
                 .andExpect(jsonPath("$.msg").value("密码不能为空"));
         verify(authenticationService, never()).authenticate(any(LoginRequest.class));
     }
+
+
 }

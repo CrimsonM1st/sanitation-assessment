@@ -1,5 +1,7 @@
 package com.example.sanitationassessment.service;
 
+import com.example.sanitationassessment.auth.AuthenticatedUser;
+import com.example.sanitationassessment.auth.JwtTokenBlacklist;
 import com.example.sanitationassessment.auth.JwtTokenProvider;
 import com.example.sanitationassessment.domain.UserRole;
 import com.example.sanitationassessment.dto.auth.LoginRequest;
@@ -15,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -36,8 +39,11 @@ class AuthenticationServiceTest {
     @Mock
     private JwtTokenProvider jwtTokenProvider;
 
+    @Mock
+    private JwtTokenBlacklist jwtTokenBlacklist;
+
     @Test
-    void authenticationSuccess() {
+    void validCredentialsShouldReturnLoginResponse() {
         SystemUserEntity entity = new SystemUserEntity();
         entity.setId(1L);
         entity.setUsername("admin");
@@ -67,7 +73,7 @@ class AuthenticationServiceTest {
     }
 
     @Test
-    void userIsNotExist() {
+    void missingUserShouldRejectAuthenticationWithoutCheckingPassword() {
         SystemUserEntity user = this.createUser(true);
         when(systemUserMapper.selectOne(any())).thenReturn(null);
 
@@ -83,7 +89,7 @@ class AuthenticationServiceTest {
     }
 
     @Test
-    void passwordWrong() {
+    void wrongPasswordShouldRejectAuthenticationWithoutIssuingToken() {
         SystemUserEntity entity = this.createUser(true);
         when(systemUserMapper.selectOne(any())).thenReturn(entity);
         when(passwordEncoder.matches(
@@ -126,5 +132,25 @@ class AuthenticationServiceTest {
         entity.setEnabled(enabled);
         entity.setCreatedAt(LocalDateTime.now());
         return entity;
+    }
+
+    @Test
+    void logoutShouldRevokeCurrentToken() {
+        Instant expiresAt =
+                Instant.now().plusSeconds(120);
+
+        AuthenticatedUser user =
+                new AuthenticatedUser(
+                        1L,
+                        "admin",
+                        UserRole.ADMIN,
+                        "token-1",
+                        expiresAt
+                );
+
+        authenticationService.logout(user);
+
+        verify(jwtTokenBlacklist)
+                .revoke("token-1", expiresAt);
     }
 }
