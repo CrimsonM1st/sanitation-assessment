@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -309,5 +310,31 @@ class JwtSecurityIntegrationTest {
                         authenticatedUser.tokenId(),
                         authenticatedUser.expiresAt()
                 );
+    }
+
+    @Test
+    void redisUnavailableDuringBlacklistCheckShouldReturnServiceUnavailable() throws Exception {
+        SystemUserResponse user = new SystemUserResponse(
+                1L,
+                "admin",
+                UserRole.ADMIN,
+                true,
+                LocalDateTime.now()
+        );
+
+        String token = jwtTokenProvider.generateToken(user);
+        when(jwtTokenBlacklist.isRevoked(anyString())).thenThrow(
+                RedisConnectionFailureException.class);
+
+        mockMvc.perform(get("/assessment-tasks")
+                        .header(
+                                HttpHeaders.AUTHORIZATION,
+                                "Bearer " + token
+                        ))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value(503))
+                .andExpect(jsonPath("$.msg").value("认证服务暂时不可用"));
+
+        verifyNoInteractions(assessmentTaskService);
     }
 }

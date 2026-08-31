@@ -21,9 +21,13 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    JwtTokenProvider jwtTokenProvider,
                                                    RestAuthenticationEntryPoint authenticationEntryPoint,
-                                                   RestAccessDeniedHandler accessDeniedHandler, JwtTokenBlacklist jwtTokenBlacklist) throws Exception {
+                                                   RestAccessDeniedHandler accessDeniedHandler,
+                                                   JwtTokenBlacklist jwtTokenBlacklist,
+                                                   RestAuthenticationServiceUnavailableHandler restAuthenticationServiceUnavailableHandler)
+            throws Exception {
         JwtAuthenticationFilter jwtAuthenticationFilter =
-                new JwtAuthenticationFilter(jwtTokenProvider, jwtTokenBlacklist);
+                new JwtAuthenticationFilter(jwtTokenProvider, jwtTokenBlacklist,
+                        restAuthenticationServiceUnavailableHandler);
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
