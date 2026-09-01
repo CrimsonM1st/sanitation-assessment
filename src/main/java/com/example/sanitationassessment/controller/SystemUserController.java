@@ -5,6 +5,7 @@ import com.example.sanitationassessment.dto.user.CreateSystemUserRequest;
 import com.example.sanitationassessment.dto.user.SystemUserResponse;
 import com.example.sanitationassessment.service.SystemUserService;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +22,7 @@ public class SystemUserController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public Result<SystemUserResponse> create(
             @Valid @RequestBody CreateSystemUserRequest request) {
         return Result.success(systemUserService.create(request));

@@ -8,6 +8,7 @@ import com.example.sanitationassessment.dto.assessment.UpdateAssessmentTaskStatu
 import com.example.sanitationassessment.service.AssessmentTaskService;
 import com.example.sanitationassessment.vo.PageResult;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -20,6 +21,7 @@ public class AssessmentTaskController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public Result<AssessmentTask> create(@Valid @RequestBody CreateAssessmentTaskRequest request) {
         AssessmentTask assessmentTask = assessmentTaskService.create(request);
         return Result.success(assessmentTask);

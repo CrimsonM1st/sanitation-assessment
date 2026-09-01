@@ -4,7 +4,7 @@ import com.example.sanitationassessment.auth.*;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -15,6 +15,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableConfigurationProperties(JwtProperties.class)
+@EnableMethodSecurity
 public class SecurityConfig {
 
     @Bean
@@ -38,18 +39,6 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/auth/login", "/hello")
                         .permitAll()
-                        .requestMatchers(HttpMethod.POST, "/users")
-                        .hasRole("ADMIN")
-                        .requestMatchers(
-                                HttpMethod.POST,
-                                "/assessment-tasks"
-                        )
-                        .hasRole("ADMIN")
-                        .requestMatchers(
-                                "/assessment-tasks",
-                                "/assessment-tasks/**"
-                        )
-                        .authenticated()
                         .anyRequest()
                         .authenticated()
                 )
