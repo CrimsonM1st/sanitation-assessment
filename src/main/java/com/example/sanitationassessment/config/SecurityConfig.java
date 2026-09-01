@@ -41,6 +41,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/users")
                         .hasRole("ADMIN")
                         .requestMatchers(
+                                HttpMethod.POST,
+                                "/assessment-tasks"
+                        )
+                        .hasRole("ADMIN")
+                        .requestMatchers(
                                 "/assessment-tasks",
                                 "/assessment-tasks/**"
                         )

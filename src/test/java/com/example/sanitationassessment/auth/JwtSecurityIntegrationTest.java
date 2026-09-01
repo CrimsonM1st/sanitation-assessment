@@ -1,7 +1,10 @@
 package com.example.sanitationassessment.auth;
 
 import com.example.sanitationassessment.config.JwtProperties;
+import com.example.sanitationassessment.domain.AssessmentTask;
+import com.example.sanitationassessment.domain.TaskStatus;
 import com.example.sanitationassessment.domain.UserRole;
+import com.example.sanitationassessment.dto.assessment.CreateAssessmentTaskRequest;
 import com.example.sanitationassessment.dto.assessment.QueryAssessmentTaskRequest;
 import com.example.sanitationassessment.dto.user.CreateSystemUserRequest;
 import com.example.sanitationassessment.dto.user.SystemUserResponse;
@@ -336,5 +339,72 @@ class JwtSecurityIntegrationTest {
                 .andExpect(jsonPath("$.msg").value("认证服务暂时不可用"));
 
         verifyNoInteractions(assessmentTaskService);
+    }
+
+    @Test
+    void inspectorCreateAssessmentTaskShouldReturnForbidden() throws Exception {
+        SystemUserResponse user = new SystemUserResponse(
+                1L,
+                "inspector",
+                UserRole.INSPECTOR,
+                true,
+                LocalDateTime.now()
+        );
+
+        String token = jwtTokenProvider.generateToken(user);
+
+        mockMvc.perform(post("/assessment-tasks")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "departmentName": "姑苏区环卫一部",
+                                  "status": "PENDING",
+                                  "score": null
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403))
+                .andExpect(jsonPath("$.msg").value("权限不足"));
+        verifyNoInteractions(assessmentTaskService);
+    }
+
+    @Test
+    void adminCreateAssessmentTaskShouldReturnSuccess() throws Exception {
+        SystemUserResponse user = new SystemUserResponse(
+                1L,
+                "admin",
+                UserRole.ADMIN,
+                true,
+                LocalDateTime.now()
+        );
+
+        String token = jwtTokenProvider.generateToken(user);
+
+        when(assessmentTaskService.create(any())).thenReturn(new AssessmentTask(
+                1L,
+                "姑苏区环卫一部",
+                TaskStatus.PENDING,
+                null,
+                LocalDateTime.now()
+        ));
+
+        mockMvc.perform(post("/assessment-tasks")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "departmentName": "姑苏区环卫一部",
+                                  "status": "PENDING",
+                                  "score": null
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.id").value(1))
+                .andExpect(jsonPath("$.data.departmentName").value("姑苏区环卫一部"))
+                .andExpect(jsonPath("$.data.status").value("PENDING"));
+        verify(assessmentTaskService)
+                .create(any(CreateAssessmentTaskRequest.class));
     }
 }
