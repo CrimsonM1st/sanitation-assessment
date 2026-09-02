@@ -7,11 +7,13 @@ import com.example.sanitationassessment.domain.UserRole;
 import com.example.sanitationassessment.dto.assessment.CreateAssessmentTaskRequest;
 import com.example.sanitationassessment.dto.assessment.QueryAssessmentTaskRequest;
 import com.example.sanitationassessment.dto.user.CreateSystemUserRequest;
+import com.example.sanitationassessment.dto.user.QuerySystemUserRequest;
 import com.example.sanitationassessment.dto.user.SystemUserResponse;
 import com.example.sanitationassessment.service.AssessmentTaskService;
 import com.example.sanitationassessment.service.SystemUserService;
 import com.example.sanitationassessment.vo.PageResult;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,6 +28,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -406,5 +410,90 @@ class JwtSecurityIntegrationTest {
                 .andExpect(jsonPath("$.data.status").value("PENDING"));
         verify(assessmentTaskService)
                 .create(any(CreateAssessmentTaskRequest.class));
+    }
+
+    @Test
+    void inspectorQueryUsersShouldReturnForbidden() throws Exception {
+        SystemUserResponse user = new SystemUserResponse(
+                1L,
+                "inspector",
+                UserRole.INSPECTOR,
+                true,
+                LocalDateTime.now()
+        );
+
+        String token = jwtTokenProvider.generateToken(user);
+
+        mockMvc.perform(get("/users")
+                        .header(
+                                HttpHeaders.AUTHORIZATION,
+                                "Bearer " + token
+                        ))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403))
+                .andExpect(jsonPath("$.msg").value("权限不足"));
+        verify(systemUserService, never()).query(any(QuerySystemUserRequest.class));
+    }
+
+    @Test
+    void adminQueryUsersShouldReturnSuccess() throws Exception {
+        SystemUserResponse user = new SystemUserResponse(
+                1L,
+                "admin",
+                UserRole.ADMIN,
+                true,
+                LocalDateTime.now()
+        );
+
+        String token = jwtTokenProvider.generateToken(user);
+
+        SystemUserResponse queriedUser = new SystemUserResponse(
+                1L,
+                "admin",
+                UserRole.ADMIN,
+                true,
+                LocalDateTime.now()
+        );
+
+        when(systemUserService.query(
+                any(QuerySystemUserRequest.class)
+        )).thenReturn(new PageResult<>(
+                List.of(queriedUser),
+                1,
+                1,
+                10,
+                1
+        ));
+
+        mockMvc.perform(get("/users?username=admin&role=ADMIN&enabled=true&pageNum=1&pageSize=10")
+                        .header(
+                                HttpHeaders.AUTHORIZATION,
+                                "Bearer " + token
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.pageNum").value(1))
+                .andExpect(jsonPath("$.data.pageSize").value(10))
+                .andExpect(jsonPath("$.data.pages").value(1))
+                .andExpect(jsonPath("$.data.records[0].id").value(1))
+                .andExpect(jsonPath("$.data.records[0].username").value("admin"))
+                .andExpect(jsonPath("$.data.records[0].role").value("ADMIN"))
+                .andExpect(jsonPath("$.data.records[0].enabled").value(true))
+                .andExpect(jsonPath("$.data.records[0].passwordHash").doesNotExist());
+        ArgumentCaptor<QuerySystemUserRequest> captor =
+                ArgumentCaptor.forClass(
+                        QuerySystemUserRequest.class
+                );
+
+        verify(systemUserService).query(captor.capture());
+
+        QuerySystemUserRequest actual = captor.getValue();
+
+        assertEquals("admin", actual.getUsername());
+        assertEquals(UserRole.ADMIN, actual.getRole());
+        assertTrue(actual.getEnabled());
+        assertEquals(1, actual.getPageNum());
+        assertEquals(10, actual.getPageSize());
     }
 }

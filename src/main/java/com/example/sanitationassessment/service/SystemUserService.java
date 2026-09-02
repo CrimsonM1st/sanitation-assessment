@@ -1,17 +1,23 @@
 package com.example.sanitationassessment.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.sanitationassessment.dto.user.CreateSystemUserRequest;
+import com.example.sanitationassessment.dto.user.QuerySystemUserRequest;
 import com.example.sanitationassessment.dto.user.SystemUserResponse;
 import com.example.sanitationassessment.entity.SystemUserEntity;
 import com.example.sanitationassessment.exception.BusinessException;
 import com.example.sanitationassessment.mapper.SystemUserMapper;
+import com.example.sanitationassessment.vo.PageResult;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class SystemUserService {
@@ -52,12 +58,42 @@ public class SystemUserService {
         if (affectedRows != 1) {
             throw new BusinessException("创建用户失败");
         }
-        return new SystemUserResponse(
-                systemUserEntity.getId(),
-                systemUserEntity.getUsername(),
-                systemUserEntity.getRole(),
-                systemUserEntity.getEnabled(),
-                systemUserEntity.getCreatedAt()
-        );
+        return this.toResponse(systemUserEntity);
+    }
+
+    public PageResult<SystemUserResponse> query(QuerySystemUserRequest request) {
+        String username = StringUtils.hasText(request.getUsername())
+                ? request.getUsername().trim()
+                : null;
+        Page<SystemUserEntity> page =
+                new Page<>(request.getPageNum(), request.getPageSize());
+        LambdaQueryWrapper<SystemUserEntity> wrapper = Wrappers.<SystemUserEntity>lambdaQuery()
+                .likeRight(StringUtils.hasText(username), SystemUserEntity::getUsername,
+                        username)
+                .eq(
+                        request.getRole() != null,
+                        SystemUserEntity::getRole,
+                        request.getRole()
+                )
+                .eq(
+                        request.getEnabled() != null,
+                        SystemUserEntity::getEnabled,
+                        request.getEnabled()
+                )
+                .orderByDesc(SystemUserEntity::getCreatedAt)
+                .orderByDesc(SystemUserEntity::getId);
+        Page<SystemUserEntity> systemUserEntityPage = systemUserMapper.selectPage(page, wrapper);
+        List<SystemUserResponse> records = systemUserEntityPage.getRecords()
+                .stream()
+                .map(this::toResponse).toList();
+        return new PageResult<>(records,
+                systemUserEntityPage.getTotal(), systemUserEntityPage.getCurrent(),
+                systemUserEntityPage.getSize(), systemUserEntityPage.getPages());
+    }
+
+    private SystemUserResponse toResponse(
+            SystemUserEntity entity) {
+        return new SystemUserResponse(entity.getId(), entity.getUsername(),
+                entity.getRole(), entity.getEnabled(), entity.getCreatedAt());
     }
 }
